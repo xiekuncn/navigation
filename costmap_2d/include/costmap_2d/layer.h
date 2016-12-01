@@ -42,6 +42,8 @@
 #include <string>
 #include <tf/tf.h>
 #include <tf/transform_listener.h>
+#include <opencv2/opencv.hpp>
+#include <cv_bridge/cv_bridge.h>
 
 namespace costmap_2d
 {
@@ -78,6 +80,8 @@ public:
   virtual void activate() {}
 
   virtual void reset() {}
+
+  virtual void getLayerMat(cv::Mat& mat) {}
 
   virtual ~Layer() {}
 

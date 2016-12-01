@@ -1,4 +1,7 @@
-#include<costmap_2d/costmap_layer.h>
+#include <costmap_2d/costmap_layer.h>
+#include <opencv2/opencv.hpp>
+#include <cv_bridge/cv_bridge.h>
+#include <fstream>
 
 namespace costmap_2d
 {
@@ -51,6 +54,7 @@ void CostmapLayer::updateWithMax(costmap_2d::Costmap2D& master_grid, int min_i, 
   unsigned char* master_array = master_grid.getCharMap();
   unsigned int span = master_grid.getSizeInCellsX();
 
+  // ROS_INFO("CostmapLayer::updateWithMax-> min_i = %d,min_j = %d,max_i = %d,max_j = %d ", min_i,min_j,max_i,max_j);
   for (int j = min_j; j < max_j; j++)
   {
     unsigned int it = j * span + min_i;
@@ -62,8 +66,10 @@ void CostmapLayer::updateWithMax(costmap_2d::Costmap2D& master_grid, int min_i, 
       }
 
       unsigned char old_cost = master_array[it];
-      if (old_cost == NO_INFORMATION || old_cost < costmap_[it])
+      if (old_cost == NO_INFORMATION || old_cost < costmap_[it]){
         master_array[it] = costmap_[it];
+      }
+     
       it++;
     }
   }

@@ -19,10 +19,13 @@ find_package(catkin REQUIRED
             std_msgs
             tf
             voxel_grid
+            robotstatus_msgs
         )
 
 find_package(PCL REQUIRED)
 find_package(Eigen REQUIRED)
+find_package(OpenCV REQUIRED)
+
 find_package(Boost REQUIRED COMPONENTS system thread)
 include_directories(
     include
@@ -78,6 +81,7 @@ catkin_package(
         std_msgs
         tf
         voxel_grid
+        robotstatus_msgs
     DEPENDS
         PCL
         Eigen
@@ -102,6 +106,7 @@ target_link_libraries(costmap_2d
   ${Boost_LIBRARIES}
   ${catkin_LIBRARIES}
 )
+target_link_libraries(costmap_2d ${OpenCV_LIBRARIES} ${catkin_LIBRARIES})
 
 add_library(layers
   plugins/inflation_layer.cpp

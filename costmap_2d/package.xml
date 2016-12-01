@@ -1,6 +1,6 @@
 <package>
     <name>costmap_2d</name>
-    <version>1.12.13</version>
+    <version>1.13.1</version>
     <description>
         This package provides an implementation of a 2D costmap that takes in sensor
         data from the world, builds a 2D or 3D occupancy grid of the data (depending
@@ -40,6 +40,9 @@
     <build_depend>visualization_msgs</build_depend>
     <build_depend>voxel_grid</build_depend>
 
+    <!-- Robot Status -->
+    <build_depend>robotstatus_msgs</build_depend>
+
     <run_depend>dynamic_reconfigure</run_depend>
     <run_depend>geometry_msgs</run_depend>
     <run_depend>laser_geometry</run_depend>
@@ -58,6 +61,8 @@
     <run_depend>tf</run_depend>
     <run_depend>visualization_msgs</run_depend>
     <run_depend>voxel_grid</run_depend>
+    
+    <run_depend>robotstatus_msgs</run_depend>
 
     <test_depend>map_server</test_depend>
     <test_depend>rosbag</test_depend>

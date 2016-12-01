@@ -38,6 +38,7 @@
 #include <costmap_2d/obstacle_layer.h>
 #include <costmap_2d/costmap_math.h>
 #include <pluginlib/class_list_macros.h>
+#include <iostream>
 
 PLUGINLIB_EXPORT_CLASS(costmap_2d::ObstacleLayer, costmap_2d::Layer)
 
@@ -99,8 +100,8 @@ void ObstacleLayer::onInitialize()
     source_node.param("data_type", data_type, std::string("PointCloud"));
     source_node.param("min_obstacle_height", min_obstacle_height, 0.0);
     source_node.param("max_obstacle_height", max_obstacle_height, 2.0);
-    source_node.param("inf_is_valid", inf_is_valid, false);
-    source_node.param("clearing", clearing, false);
+    source_node.param("inf_is_valid", inf_is_valid, true);
+    source_node.param("clearing", clearing, true);
     source_node.param("marking", marking, true);
 
     if (!sensor_frame.empty())
@@ -255,7 +256,7 @@ void ObstacleLayer::laserScanCallback(const sensor_msgs::LaserScanConstPtr& mess
   // project the laser into a point cloud
   sensor_msgs::PointCloud2 cloud;
   cloud.header = message->header;
-
+  
   // project the scan into a point cloud
   try
   {
@@ -283,7 +284,7 @@ void ObstacleLayer::laserScanValidInfCallback(const sensor_msgs::LaserScanConstP
   for (size_t i = 0; i < message.ranges.size(); i++)
   {
     float range = message.ranges[ i ];
-    if (!std::isfinite(range) && range > 0)
+    if (isnan(range))
     {
       message.ranges[ i ] = message.range_max - epsilon;
     }

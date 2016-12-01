@@ -38,6 +38,7 @@
 #include <costmap_2d/voxel_layer.h>
 #include <pluginlib/class_list_macros.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include <iostream>
 
 #define VOXEL_BITS 16
 PLUGINLIB_EXPORT_CLASS(costmap_2d::VoxelLayer, costmap_2d::Layer)
@@ -163,7 +164,6 @@ void VoxelLayer::updateBounds(double robot_x, double robot_y, double robot_yaw, 
       // if the point is far enough away... we won't consider it
       if (sq_dist >= sq_obstacle_range)
         continue;
-
       // now we need to compute the map coordinates for the observation
       unsigned int mx, my, mz;
       if (cloud.points[i].z < origin_z_)

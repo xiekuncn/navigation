@@ -41,6 +41,7 @@
 #include <costmap_2d/footprint.h>
 #include <boost/thread.hpp>
 #include <pluginlib/class_list_macros.h>
+#include <fstream>
 
 PLUGINLIB_EXPORT_CLASS(costmap_2d::InflationLayer, costmap_2d::Layer)
 
@@ -70,6 +71,9 @@ InflationLayer::InflationLayer()
 
 void InflationLayer::onInitialize()
 {
+  cv::Mat tmp(21,13,CV_8U,cv::Scalar(0));
+  middleInflationMap = tmp.clone();//Init the Mat with Deep Copy
+
   {
     boost::unique_lock < boost::recursive_mutex > lock(*inflation_access_);
     ros::NodeHandle nh("~/" + name_), g_nh;
@@ -122,6 +126,10 @@ void InflationLayer::matchSize()
   seen_ = new bool[seen_size_];
 }
 
+void InflationLayer::getLayerMat(cv::Mat& inflationmap){
+  inflationmap = middleInflationMap.clone();
+}
+
 void InflationLayer::updateBounds(double robot_x, double robot_y, double robot_yaw, double* min_x,
                                            double* min_y, double* max_x, double* max_y)
 {
@@ -142,6 +150,8 @@ void InflationLayer::updateBounds(double robot_x, double robot_y, double robot_y
   }
   else
   {
+   // ROS_INFO("inflation_robot_angle_ = %f / robot_yaw = %f ",inflation_robot_angle_,robot_yaw);
+    inflation_robot_angle_  = robot_yaw * 180 / 3.1415926;
     double tmp_min_x = last_min_x_;
     double tmp_min_y = last_min_y_;
     double tmp_max_x = last_max_x_;
@@ -210,19 +220,56 @@ void InflationLayer::updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, 
   max_i = std::min(int(size_x), max_i);
   max_j = std::min(int(size_y), max_j);
 
+  cv::Mat inflationMap(200,200,CV_8U,cv::Scalar(0));
+  cv::Point2f center = cv::Point2f(inflationMap.cols/2 , inflationMap.rows/2);
+  double angle = -inflation_robot_angle_;
+  cv::Mat rotateMat;
+  cv::Mat inflationRotateResult;
+  rotateMat = cv::getRotationMatrix2D(center,angle,1);
+
+  //ROS_INFO("InflationLayer::updateCosts-> min_i = %d,min_j = %d,max_i = %d,max_j = %d ", min_i,min_j,max_i,max_j);
   for (int j = min_j; j < max_j; j++)
   {
     for (int i = min_i; i < max_i; i++)
     {
       int index = master_grid.getIndex(i, j);
       unsigned char cost = master_array[index];
+      
+      if ((int)cost == 255)
+        inflationMap.at<unsigned char>(i,j) = 0;
+      if ((int)cost == 0)
+        inflationMap.at<unsigned char>(i,j) = 255;
+
       if (cost == LETHAL_OBSTACLE)
       {
         enqueue(index, i, j, i, j);
       }
     }
   }
-
+  
+  // ROS_INFO("Show InflationLayer!");
+  if(max_i == 200){
+    std::ofstream inflationData("inflationData");
+    cv::warpAffine(inflationMap,inflationRotateResult,rotateMat,inflationMap.size());
+    for (unsigned int j = 100; j <= 120; j++){
+      for (unsigned int i = 94; i <= 106; i++){
+        if ((int)inflationRotateResult.at<unsigned char>(j,i) > 128)
+          middleInflationMap.at<unsigned char>(j - 100,i - 94) = 255;
+        else
+          middleInflationMap.at<unsigned char>(j - 100,i - 94) = 0;
+        inflationData << (int)middleInflationMap.at<unsigned char>(j - 100,i - 94) << " ";
+      }
+      inflationData << std::endl;
+    }
+    inflationData.close();
+    // cv::imshow("middleInflationMap",middleInflationMap);
+    // cv::waitKey(1);
+    // cv::imshow("inflationRotateResult",inflationRotateResult);
+    // cv::waitKey(1);
+    // cv::imshow("inflationMap",inflationMap);
+    // cv::waitKey(1);
+  }
+  
   while (!inflation_queue_.empty())
   {
     // get the highest priority cell and pop it off the priority queue

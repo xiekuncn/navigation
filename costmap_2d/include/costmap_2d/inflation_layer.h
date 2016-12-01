@@ -45,6 +45,8 @@
 #include <dynamic_reconfigure/server.h>
 #include <boost/thread.hpp>
 #include <queue>
+#include <opencv2/opencv.hpp>
+#include <cv_bridge/cv_bridge.h>
 
 namespace costmap_2d
 {
@@ -100,6 +102,7 @@ public:
   virtual void updateBounds(double robot_x, double robot_y, double robot_yaw, double* min_x, double* min_y,
                             double* max_x, double* max_y);
   virtual void updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, int min_j, int max_i, int max_j);
+  virtual void getLayerMat(cv::Mat& inflationmap);
   virtual bool isDiscretized()
   {
     return true;
@@ -188,6 +191,8 @@ private:
   std::priority_queue<CellData> inflation_queue_;
 
   double resolution_;
+  double inflation_robot_angle_;
+  cv::Mat middleInflationMap;
 
   bool* seen_;
   int seen_size_;

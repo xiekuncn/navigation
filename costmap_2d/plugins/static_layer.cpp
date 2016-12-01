@@ -39,6 +39,7 @@
 #include <costmap_2d/static_layer.h>
 #include <costmap_2d/costmap_math.h>
 #include <pluginlib/class_list_macros.h>
+#include <fstream>
 
 PLUGINLIB_EXPORT_CLASS(costmap_2d::StaticLayer, costmap_2d::Layer)
 
@@ -63,11 +64,13 @@ void StaticLayer::onInitialize()
   current_ = true;
 
   global_frame_ = layered_costmap_->getGlobalFrameID();
+  cv::Mat tmp(21,13,CV_8U,cv::Scalar(0));
+  middleStaticMap = tmp.clone();//Init the Mat with Deep Copy
 
   std::string map_topic;
   nh.param("map_topic", map_topic, std::string("map"));
   nh.param("first_map_only", first_map_only_, false);
-  nh.param("subscribe_to_updates", subscribe_to_updates_, false);
+  nh.param("subscribe_to_updates", subscribe_to_updates_, true);
 
   nh.param("track_unknown_space", track_unknown_space_, true);
   nh.param("use_maximum", use_maximum_, false);
@@ -164,6 +167,8 @@ unsigned char StaticLayer::interpretValue(unsigned char value)
 void StaticLayer::incomingMap(const nav_msgs::OccupancyGridConstPtr& new_map)
 {
   unsigned int size_x = new_map->info.width, size_y = new_map->info.height;
+  cv::Mat staticMap(size_y,size_x,CV_8U,cv::Scalar(128));
+
 
   ROS_DEBUG("Received a %d X %d map at %f m/pix", size_x, size_y, new_map->info.resolution);
 
@@ -193,7 +198,6 @@ void StaticLayer::incomingMap(const nav_msgs::OccupancyGridConstPtr& new_map)
   }
 
   unsigned int index = 0;
-
   // initialize the costmap with static data
   for (unsigned int i = 0; i < size_y; ++i)
   {
@@ -264,15 +268,18 @@ void StaticLayer::reset()
   }
 }
 
+void StaticLayer::getLayerMat(cv::Mat& staticmap){
+  staticmap = middleStaticMap.clone();
+}
+
 void StaticLayer::updateBounds(double robot_x, double robot_y, double robot_yaw, double* min_x, double* min_y,
                                double* max_x, double* max_y)
 {
-
   if( !layered_costmap_->isRolling() ){
     if (!map_received_ || !(has_updated_data_ || has_extra_bounds_))
       return;
   }
-
+  static_robot_angle_ = robot_yaw*180/3.1415926;
   useExtraBounds(min_x, min_y, max_x, max_y);
 
   double wx, wy;
@@ -290,14 +297,25 @@ void StaticLayer::updateBounds(double robot_x, double robot_y, double robot_yaw,
 
 void StaticLayer::updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, int min_j, int max_i, int max_j)
 {
+  cv::Mat staticMap(max_j,max_i,CV_8U,cv::Scalar(0));
+  cv::Point2f center = cv::Point2f(staticMap.cols/2 , staticMap.rows/2);
+
+  double angle = -static_robot_angle_;
+  cv::Mat rotateMat;
+  cv::Mat staticRotateResult;
+  rotateMat = cv::getRotationMatrix2D(center,angle,1);
+
   if (!map_received_)
     return;
 
+  //ROS_INFO("rolling ? %d",layered_costmap_->isRolling());
   if (!layered_costmap_->isRolling())
   {
     // if not rolling, the layered costmap (master_grid) has same coordinates as this layer
-    if (!use_maximum_)
+    if (!use_maximum_){
       updateWithTrueOverwrite(master_grid, min_i, min_j, max_i, max_j);
+      ROS_INFO("min_i = %d,min_j = %d,max_i = %d,max_j = %d ", min_i,min_j,max_i,max_j);
+    }
     else
       updateWithMax(master_grid, min_i, min_j, max_i, max_j);
   }
@@ -330,12 +348,39 @@ void StaticLayer::updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, int
         // Set master_grid with cell from map
         if (worldToMap(p.x(), p.y(), mx, my))
         {
-          if (!use_maximum_)
+          if (!use_maximum_){
             master_grid.setCost(i, j, getCost(mx, my));
+            if ((int)getCost(mx,my) > 254)
+              staticMap.at<unsigned char>(i,j) = 0;
+            else if ((int)getCost(mx,my) == 0)
+              staticMap.at<unsigned char>(i,j) = 255;
+          }
           else
             master_grid.setCost(i, j, std::max(getCost(mx, my), master_grid.getCost(i, j)));
         }
       }
+    }
+
+    if(max_i == 200){
+      std::ofstream staticData("staticData");
+      cv::warpAffine(staticMap,staticRotateResult,rotateMat,staticMap.size());
+      for (unsigned int j = 100; j <= 120; j++){
+        for (unsigned int i = 94; i <= 106; i++){
+          if ((int)staticRotateResult.at<unsigned char>(j,i) > 128)
+            middleStaticMap.at<unsigned char>(j - 100,i - 94) = 255;
+          else
+            middleStaticMap.at<unsigned char>(j - 100,i - 94) = 0;
+          staticData << (int)middleStaticMap.at<unsigned char>(j - 100,i - 94) << " " ;
+        }
+        staticData << std::endl;
+      }
+      staticData.close();
+      // cv::imshow("staticRotateResult",staticRotateResult);
+      // cv::waitKey(1);
+      // cv::imshow("middleStaticMap",middleStaticMap);
+      // cv::waitKey(1);
+      // cv::imshow("staticMap",staticMap);
+      // cv::waitKey(1);
     }
   }
 }

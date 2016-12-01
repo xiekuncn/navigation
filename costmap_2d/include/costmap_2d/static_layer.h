@@ -46,6 +46,8 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <map_msgs/OccupancyGridUpdate.h>
 #include <message_filters/subscriber.h>
+#include <opencv2/opencv.hpp>
+#include <cv_bridge/cv_bridge.h>
 
 namespace costmap_2d
 {
@@ -65,6 +67,7 @@ public:
   virtual void updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, int min_j, int max_i, int max_j);
 
   virtual void matchSize();
+  virtual void getLayerMat(cv::Mat& staticmap);
 
 private:
   /**
@@ -89,6 +92,9 @@ private:
   bool use_maximum_;
   bool first_map_only_;      ///< @brief Store the first static map and reuse it on reinitializing
   bool trinary_costmap_;
+  double static_robot_angle_;
+
+  cv::Mat middleStaticMap;
   ros::Subscriber map_sub_, map_update_sub_;
 
   unsigned char lethal_threshold_, unknown_cost_value_;

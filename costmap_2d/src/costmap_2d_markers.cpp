@@ -40,6 +40,7 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <costmap_2d/VoxelGrid.h>
 #include <voxel_grid/voxel_grid.h>
+#include <iostream>
 
 struct Cell
 {

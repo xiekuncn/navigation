@@ -41,6 +41,7 @@
 #include <string>
 #include <algorithm>
 #include <vector>
+#include <ros/console.h>
 
 
 using namespace std;
@@ -64,6 +65,7 @@ Costmap2DROS::Costmap2DROS(std::string name, tf::TransformListener& tf) :
     robot_stopped_(false), map_update_thread_(NULL), last_publish_(0),
     plugin_loader_("costmap_2d", "costmap_2d::Layer"), publisher_(NULL)
 {
+  ROS_INFO("My Init!");
   ros::NodeHandle private_nh("~/" + name);
   ros::NodeHandle g_nh;
 
@@ -100,7 +102,7 @@ Costmap2DROS::Costmap2DROS(std::string name, tf::TransformListener& tf) :
 
   // check if we want a rolling window version of the costmap
   bool rolling_window, track_unknown_space, always_send_full_costmap;
-  private_nh.param("rolling_window", rolling_window, false);
+  private_nh.param("rolling_window", rolling_window, true);
   private_nh.param("track_unknown_space", track_unknown_space, false);
   private_nh.param("always_send_full_costmap", always_send_full_costmap, false);
 
@@ -115,6 +117,7 @@ Costmap2DROS::Costmap2DROS(std::string name, tf::TransformListener& tf) :
   {
     XmlRpc::XmlRpcValue my_list;
     private_nh.getParam("plugins", my_list);
+    ROS_INFO("plugins --  my_list.size = %d ",my_list.size());
     for (int32_t i = 0; i < my_list.size(); ++i)
     {
       std::string pname = static_cast<std::string>(my_list[i]["name"]);
@@ -375,10 +378,14 @@ void Costmap2DROS::movementCB(const ros::TimerEvent &event)
 void Costmap2DROS::mapUpdateLoop(double frequency)
 {
   // the user might not want to run the loop every cycle
+  bool result = false;
+  robotstatus_msgs::Obstacle OB;
+
   if (frequency == 0.0)
     return;
-
+  
   ros::NodeHandle nh;
+  robotstatus_pub_ = nh.advertise< robotstatus_msgs::Obstacle > ("status/obstacle",1);
   ros::Rate r(frequency);
   while (nh.ok() && !map_update_thread_shutdown_)
   {
@@ -387,6 +394,13 @@ void Costmap2DROS::mapUpdateLoop(double frequency)
     gettimeofday(&start, NULL);
 
     updateMap();
+    result = layered_costmap_->getObstacleResult();
+
+    if(result == true)
+      OB.obstacle = robotstatus_msgs::Obstacle::Y_OBSTACLE;
+    else
+      OB.obstacle = robotstatus_msgs::Obstacle::N_OBSTACLE;
+    robotstatus_pub_.publish(OB);
 
     gettimeofday(&end, NULL);
     start_t = start.tv_sec + double(start.tv_usec) / 1e6;

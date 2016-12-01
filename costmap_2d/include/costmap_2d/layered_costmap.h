@@ -43,6 +43,8 @@
 #include <costmap_2d/costmap_2d.h>
 #include <vector>
 #include <string>
+#include <opencv2/opencv.hpp>
+#include <cv_bridge/cv_bridge.h>
 
 namespace costmap_2d
 {
@@ -70,6 +72,8 @@ public:
    * If you want to update the map outside of the update loop that runs, you can call this.
    */
   void updateMap(double robot_x, double robot_y, double robot_yaw);
+  bool isObstacle(cv::Mat staticMat, cv::Mat inflationMat);
+  bool getObstacleResult();
 
   std::string getGlobalFrameID() const
   {
@@ -161,10 +165,12 @@ private:
   bool rolling_window_;  /// < @brief Whether or not the costmap should roll with the robot
 
   bool current_;
+  static bool obstacleResult_;
   double minx_, miny_, maxx_, maxy_;
   unsigned int bx0_, bxn_, by0_, byn_;
 
   std::vector<boost::shared_ptr<Layer> > plugins_;
+  
 
   bool initialized_;
   bool size_locked_;
