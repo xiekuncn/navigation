@@ -61,7 +61,7 @@ void RotateRecovery::initialize(std::string name, tf::TransformListener* tf,
     private_nh.param("frequency", frequency_, 20.0);
 
     blp_nh.param("acc_lim_th", acc_lim_th_, 3.2);
-    blp_nh.param("max_rotational_vel", max_rotational_vel_, 1.0);
+    blp_nh.param("max_rotational_vel", max_rotational_vel_, 0.5);
     blp_nh.param("min_in_place_rotational_vel", min_rotational_vel_, 0.4);
     blp_nh.param("yaw_goal_tolerance", tolerance_, 0.10);
 
@@ -142,8 +142,10 @@ void RotateRecovery::runBehavior(){
     vel_pub.publish(cmd_vel);
 
     //makes sure that we won't decide we're done right after we start
-    if(current_angle < 0.0)
+    if(current_angle < 0.0) {
       got_180 = true;
+      return ;
+    }
 
     //if we're done with our in-place rotation... then return
     if(got_180 && current_angle >= (0.0 - tolerance_))
