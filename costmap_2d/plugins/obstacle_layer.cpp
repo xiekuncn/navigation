@@ -100,7 +100,7 @@ void ObstacleLayer::onInitialize()
     source_node.param("data_type", data_type, std::string("PointCloud"));
     source_node.param("min_obstacle_height", min_obstacle_height, 0.0);
     source_node.param("max_obstacle_height", max_obstacle_height, 2.0);
-    source_node.param("inf_is_valid", inf_is_valid, true);
+    source_node.param("inf_is_valid", inf_is_valid, false);
     source_node.param("clearing", clearing, true);
     source_node.param("marking", marking, true);
 
@@ -250,23 +250,34 @@ void ObstacleLayer::reconfigureCB(costmap_2d::ObstaclePluginConfig &config, uint
   combination_method_ = config.combination_method;
 }
 
-void ObstacleLayer::laserScanCallback(const sensor_msgs::LaserScanConstPtr& message,
+void ObstacleLayer::laserScanCallback(const sensor_msgs::LaserScanConstPtr& s_message,
                                       const boost::shared_ptr<ObservationBuffer>& buffer)
 {
+  float epsilon = 0.0001;  // a tenth of a millimeter
+  sensor_msgs::LaserScan message = *s_message;
+  for (size_t i = 0; i < message.ranges.size(); i++)
+  {
+    float range = message.ranges[ i ];
+    if (isnan(range))
+    {
+      message.ranges[ i ] = message.range_max - epsilon;
+    }
+  }
+  
   // project the laser into a point cloud
   sensor_msgs::PointCloud2 cloud;
-  cloud.header = message->header;
+  cloud.header = message.header;
   
   // project the scan into a point cloud
   try
   {
-    projector_.transformLaserScanToPointCloud(message->header.frame_id, *message, cloud, *tf_);
+    projector_.transformLaserScanToPointCloud(message.header.frame_id, message, cloud, *tf_);
   }
   catch (tf::TransformException &ex)
   {
     ROS_WARN("High fidelity enabled, but TF returned a transform exception to frame %s: %s", global_frame_.c_str(),
              ex.what());
-    projector_.projectLaser(*message, cloud);
+    projector_.projectLaser(message, cloud);
   }
 
   // buffer the point cloud
@@ -284,7 +295,7 @@ void ObstacleLayer::laserScanValidInfCallback(const sensor_msgs::LaserScanConstP
   for (size_t i = 0; i < message.ranges.size(); i++)
   {
     float range = message.ranges[ i ];
-    if (isnan(range))
+    if (!std::isfinite(range) && range >0)
     {
       message.ranges[ i ] = message.range_max - epsilon;
     }

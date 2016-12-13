@@ -48,7 +48,7 @@ using std::vector;
 namespace costmap_2d
 {
 
-bool LayeredCostmap::obstacleResult_ = false;
+float LayeredCostmap::obstacleResult_ = 0.0;
 
 LayeredCostmap::LayeredCostmap(std::string global_frame, bool rolling_window, bool track_unknown) :
     costmap_(), global_frame_(global_frame), rolling_window_(rolling_window), initialized_(false), size_locked_(false)
@@ -79,25 +79,32 @@ void LayeredCostmap::resizeMap(unsigned int size_x, unsigned int size_y, double 
   }
 }
 
-bool LayeredCostmap::getObstacleResult(){
+float LayeredCostmap::getObstacleResult(){
   return obstacleResult_;
 }
 
-bool LayeredCostmap::isObstacle(cv::Mat staticMat, cv::Mat inflationMat){
+void LayeredCostmap::isObstacle(cv::Mat staticMat, cv::Mat inflationMat){
   cv::Mat deltaMat(21,13,CV_8U,cv::Scalar(0));
   deltaMat = staticMat - inflationMat;
   int count = 0;
-  for (unsigned int j = 0; j <= 20; j++){
-      for (unsigned int i = 0; i <= 12; i++){
-        if((int)deltaMat.at<unsigned char>(j,i) == 255)
-          count++; 
-      }
-  }
+  unsigned int closest_pixel = 30;
 
-  if(count >= 2)
-    return true;
-  else
-    return false;
+  for (unsigned int w = 0; w <= 12; w++){
+    for (unsigned int h = 0; h <= 20; h++){
+      if((int)deltaMat.at<unsigned char>(h,w) == 255){
+         if( h < closest_pixel){
+          closest_pixel = h;
+         }
+         count++;
+      }
+
+    }
+  }
+  if (count >= 2 && closest_pixel < 30){
+    obstacleResult_ = (closest_pixel + 1) * 0.05;
+  } else {
+    obstacleResult_ = -1.0;
+  }
 }
 
 void LayeredCostmap::updateMap(double robot_x, double robot_y, double robot_yaw)
@@ -170,18 +177,7 @@ void LayeredCostmap::updateMap(double robot_x, double robot_y, double robot_yaw)
       if(plugin == plugins_.end() - 1)  // inflation layer
         (*plugin)->getLayerMat(threeLayer);
     }
-    // for (unsigned int j = 0; j <= 20; j++){
-    //   for (unsigned int i = 0; i <= 12; i++){
-    //     firstLayer << (int)oneLayer.at<unsigned char>(j,i) << " ";
-    //     thirdLayer << (int)threeLayer.at<unsigned char>(j,i) << " ";
-    //   }
-    //   firstLayer << std::endl;
-    //   thirdLayer << std::endl;
-    // }
-    // firstLayer.close();
-    // thirdLayer.close();
-    // ROS_INFO("isObstacle = %d",isObstacle(oneLayer,threeLayer));
-    obstacleResult_ = isObstacle(oneLayer,threeLayer);
+    isObstacle(oneLayer,threeLayer);
 
     // cv::imshow("oneLayer",oneLayer);
     // cv::waitKey(1);

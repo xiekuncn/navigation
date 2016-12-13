@@ -378,14 +378,13 @@ void Costmap2DROS::movementCB(const ros::TimerEvent &event)
 void Costmap2DROS::mapUpdateLoop(double frequency)
 {
   // the user might not want to run the loop every cycle
-  bool result = false;
-  robotstatus_msgs::Obstacle OB;
+  std_msgs::Float32 obstacle_msg;
 
   if (frequency == 0.0)
     return;
   
   ros::NodeHandle nh;
-  robotstatus_pub_ = nh.advertise< robotstatus_msgs::Obstacle > ("status/obstacle",1);
+  obstacle_distance_pub_ = nh.advertise< std_msgs::Float32 > ("costmap_2d/obstacle_distance",10);
   ros::Rate r(frequency);
   while (nh.ok() && !map_update_thread_shutdown_)
   {
@@ -394,13 +393,10 @@ void Costmap2DROS::mapUpdateLoop(double frequency)
     gettimeofday(&start, NULL);
 
     updateMap();
-    result = layered_costmap_->getObstacleResult();
-
-    if(result == true)
-      OB.obstacle = robotstatus_msgs::Obstacle::Y_OBSTACLE;
-    else
-      OB.obstacle = robotstatus_msgs::Obstacle::N_OBSTACLE;
-    robotstatus_pub_.publish(OB);
+    obstacle_msg.data = layered_costmap_->getObstacleResult();
+    // ROS_INFO("obstacle_distance = %f !!", obstacle_msg.data);
+    
+    obstacle_distance_pub_.publish(obstacle_msg);
 
     gettimeofday(&end, NULL);
     start_t = start.tv_sec + double(start.tv_usec) / 1e6;

@@ -72,8 +72,8 @@ public:
    * If you want to update the map outside of the update loop that runs, you can call this.
    */
   void updateMap(double robot_x, double robot_y, double robot_yaw);
-  bool isObstacle(cv::Mat staticMat, cv::Mat inflationMat);
-  bool getObstacleResult();
+  void isObstacle(cv::Mat staticMat, cv::Mat inflationMat);
+  float getObstacleResult();
 
   std::string getGlobalFrameID() const
   {
@@ -165,7 +165,7 @@ private:
   bool rolling_window_;  /// < @brief Whether or not the costmap should roll with the robot
 
   bool current_;
-  static bool obstacleResult_;
+  static float obstacleResult_;
   double minx_, miny_, maxx_, maxy_;
   unsigned int bx0_, bxn_, by0_, byn_;
 
