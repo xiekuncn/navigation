@@ -216,6 +216,7 @@ namespace base_local_planner {
     return true;
   }
 
+  bool isRecachGoalPoint = false;
   bool isGoalReached(const tf::TransformListener& tf,
       const std::vector<geometry_msgs::PoseStamped>& global_plan,
       const costmap_2d::Costmap2D& costmap __attribute__((unused)),
@@ -235,11 +236,17 @@ namespace base_local_planner {
 
     //check to see if we've reached the goal position
     if(getGoalPositionDistance(global_pose, goal_x, goal_y) <= xy_goal_tolerance) {
+      isRecachGoalPoint = true;
+    }
+ 
+    if(isRecachGoalPoint){
       //check to see if the goal orientation has been reached
       if(fabs(getGoalOrientationAngleDifference(global_pose, goal_th)) <= yaw_goal_tolerance) {
         //make sure that we're actually stopped before returning success
-        if(stopped(base_odom, rot_stopped_vel, trans_stopped_vel))
-          return true;
+        if(stopped(base_odom, rot_stopped_vel, trans_stopped_vel)){
+          isRecachGoalPoint = false;
+          return true;      
+        }
       }
     }
 
