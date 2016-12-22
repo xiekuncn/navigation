@@ -52,6 +52,9 @@
 namespace costmap_2d
 {
 
+#define CUT_STATIC_WIDTH    12
+#define CUT_STATIC_HEIGHT   20
+
 class StaticLayer : public CostmapLayer
 {
 public:
@@ -67,7 +70,9 @@ public:
   virtual void updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, int min_j, int max_i, int max_j);
 
   virtual void matchSize();
+
   virtual void getLayerMat(cv::Mat& staticmap);
+
 
 private:
   /**
@@ -79,6 +84,9 @@ private:
   void incomingMap(const nav_msgs::OccupancyGridConstPtr& new_map);
   void incomingUpdate(const map_msgs::OccupancyGridUpdateConstPtr& update);
   void reconfigureCB(costmap_2d::GenericPluginConfig &config, uint32_t level);
+
+  void getLocalStaticMat(cv::Mat staticMat, int width, int height);
+
 
   unsigned char interpretValue(unsigned char value);
 
@@ -92,10 +100,10 @@ private:
   bool use_maximum_;
   bool first_map_only_;      ///< @brief Store the first static map and reuse it on reinitializing
   bool trinary_costmap_;
-  double static_robot_angle_;
-
-  cv::Mat middleStaticMap;
   ros::Subscriber map_sub_, map_update_sub_;
+
+  double static_robot_angle_;
+  cv::Mat middleStaticMat;
 
   unsigned char lethal_threshold_, unknown_cost_value_;
 

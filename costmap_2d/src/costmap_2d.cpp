@@ -37,6 +37,7 @@
  *********************************************************************/
 #include <costmap_2d/costmap_2d.h>
 #include <cstdio>
+#include <ros/console.h>
 
 using namespace std;
 
@@ -48,6 +49,8 @@ Costmap2D::Costmap2D(unsigned int cells_size_x, unsigned int cells_size_y, doubl
     origin_y_(origin_y), costmap_(NULL), default_value_(default_value)
 {
   access_ = new mutex_t();
+
+  ROS_INFO("Init2D :: size_x_ = %d  size_y_ = %d",size_x_,size_y_);
 
   // create the costmap
   initMaps(size_x_, size_y_);

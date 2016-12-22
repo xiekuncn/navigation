@@ -81,7 +81,6 @@ catkin_package(
         std_msgs
         tf
         voxel_grid
-        robotstatus_msgs
     DEPENDS
         PCL
         Eigen

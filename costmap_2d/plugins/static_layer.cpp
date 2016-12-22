@@ -39,7 +39,6 @@
 #include <costmap_2d/static_layer.h>
 #include <costmap_2d/costmap_math.h>
 #include <pluginlib/class_list_macros.h>
-#include <fstream>
 
 PLUGINLIB_EXPORT_CLASS(costmap_2d::StaticLayer, costmap_2d::Layer)
 
@@ -64,13 +63,13 @@ void StaticLayer::onInitialize()
   current_ = true;
 
   global_frame_ = layered_costmap_->getGlobalFrameID();
-  cv::Mat tmp(21,13,CV_8U,cv::Scalar(0));
-  middleStaticMap = tmp.clone();//Init the Mat with Deep Copy
+  cv::Mat tmp( CUT_STATIC_HEIGHT, CUT_STATIC_WIDTH, CV_8U, cv::Scalar(0));
+  middleStaticMat = tmp.clone();//Init the Mat with Deep Copy
 
   std::string map_topic;
   nh.param("map_topic", map_topic, std::string("map"));
   nh.param("first_map_only", first_map_only_, false);
-  nh.param("subscribe_to_updates", subscribe_to_updates_, true);
+  nh.param("subscribe_to_updates", subscribe_to_updates_, false);
 
   nh.param("track_unknown_space", track_unknown_space_, true);
   nh.param("use_maximum", use_maximum_, false);
@@ -99,13 +98,12 @@ void StaticLayer::onInitialize()
       r.sleep();
     }
 
-    ROS_INFO("Received a %d X %d map at %f m/pix", getSizeInCellsX(), getSizeInCellsY(), getResolution());
+    ROS_INFO("1 Received a %d X %d map at %f m/pix", getSizeInCellsX(), getSizeInCellsY(), getResolution());
 
     if (subscribe_to_updates_)
     {
       ROS_INFO("Subscribing to updates");
       map_update_sub_ = g_nh.subscribe(map_topic + "_updates", 10, &StaticLayer::incomingUpdate, this);
-
     }
   }
   else
@@ -117,7 +115,6 @@ void StaticLayer::onInitialize()
   {
     delete dsrv_;
   }
-
   dsrv_ = new dynamic_reconfigure::Server<costmap_2d::GenericPluginConfig>(nh);
   dynamic_reconfigure::Server<costmap_2d::GenericPluginConfig>::CallbackType cb = boost::bind(
       &StaticLayer::reconfigureCB, this, _1, _2);
@@ -167,10 +164,8 @@ unsigned char StaticLayer::interpretValue(unsigned char value)
 void StaticLayer::incomingMap(const nav_msgs::OccupancyGridConstPtr& new_map)
 {
   unsigned int size_x = new_map->info.width, size_y = new_map->info.height;
-  cv::Mat staticMap(size_y,size_x,CV_8U,cv::Scalar(128));
 
-
-  ROS_DEBUG("Received a %d X %d map at %f m/pix", size_x, size_y, new_map->info.resolution);
+  ROS_INFO("2 Received a %d X %d map at %f m/pix", size_x, size_y, new_map->info.resolution);
 
   // resize costmap if size, resolution or origin do not match
   Costmap2D* master = layered_costmap_->getCostmap();
@@ -198,6 +193,7 @@ void StaticLayer::incomingMap(const nav_msgs::OccupancyGridConstPtr& new_map)
   }
 
   unsigned int index = 0;
+
   // initialize the costmap with static data
   for (unsigned int i = 0; i < size_y; ++i)
   {
@@ -227,6 +223,7 @@ void StaticLayer::incomingMap(const nav_msgs::OccupancyGridConstPtr& new_map)
 
 void StaticLayer::incomingUpdate(const map_msgs::OccupancyGridUpdateConstPtr& update)
 {
+  ROS_INFO("Calling incomingUpdate !!!!");
   unsigned int di = 0;
   for (unsigned int y = 0; y < update->height ; y++)
   {
@@ -268,18 +265,21 @@ void StaticLayer::reset()
   }
 }
 
-void StaticLayer::getLayerMat(cv::Mat& staticmap){
-  staticmap = middleStaticMap.clone();
+
+void StaticLayer::getLayerMat(cv::Mat& staticmat){
+  staticmat = middleStaticMat.clone();
 }
 
 void StaticLayer::updateBounds(double robot_x, double robot_y, double robot_yaw, double* min_x, double* min_y,
                                double* max_x, double* max_y)
 {
-  if( !layered_costmap_->isRolling() ){
-    if (!map_received_ || !(has_updated_data_ || has_extra_bounds_))
+  static_robot_angle_ = robot_yaw * 180 / 3.1415926;
+
+  if( !layered_costmap_->isRolling() ){ // 0
+    if (!map_received_ || !(has_updated_data_ || has_extra_bounds_)) // 1  0  0
       return;
   }
-  static_robot_angle_ = robot_yaw*180/3.1415926;
+  
   useExtraBounds(min_x, min_y, max_x, max_y);
 
   double wx, wy;
@@ -295,35 +295,55 @@ void StaticLayer::updateBounds(double robot_x, double robot_y, double robot_yaw,
   has_updated_data_ = false;
 }
 
-void StaticLayer::updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, int min_j, int max_i, int max_j)
-{
-  cv::Mat staticMap(max_j,max_i,CV_8U,cv::Scalar(0));
-  cv::Point2f center = cv::Point2f(staticMap.cols/2 , staticMap.rows/2);
 
+void StaticLayer::getLocalStaticMat(cv::Mat staticMat, int width, int height){
+  cv::Point2f center = cv::Point2f(staticMat.cols/2, staticMat.rows/2);
   double angle = -static_robot_angle_;
   cv::Mat rotateMat;
   cv::Mat staticRotateResult;
   rotateMat = cv::getRotationMatrix2D(center,angle,1);
+  cv::warpAffine(staticMat, staticRotateResult, rotateMat, staticMat.size());
 
+  for (unsigned int j = height/2; j < height/2 + CUT_STATIC_HEIGHT; j++){
+    for (unsigned int i = (width/2 - CUT_STATIC_WIDTH/2); i < (width/2 + CUT_STATIC_WIDTH/2); i++){
+      if ((int)staticRotateResult.at<unsigned char>(j,i) > 254)
+        middleStaticMat.at<unsigned char>(j - height/2, i - (width/2 - CUT_STATIC_WIDTH/2)) = 255;
+      else
+        middleStaticMat.at<unsigned char>(j - height/2, i - (width/2 - CUT_STATIC_WIDTH/2)) = 0;
+    }
+  }
+
+  // cv::imshow("SR",staticRotateResult);
+  // cv::waitKey(1);
+  // cv::imshow("mS",middleStaticMat);
+  // cv::waitKey(1);
+  // cv::imshow("staticMat",staticMat);
+  // cv::waitKey(1);
+}
+
+void StaticLayer::updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, int min_j, int max_i, int max_j)
+{
   if (!map_received_)
     return;
 
-  //ROS_INFO("rolling ? %d",layered_costmap_->isRolling());
   if (!layered_costmap_->isRolling())
   {
     // if not rolling, the layered costmap (master_grid) has same coordinates as this layer
     if (!use_maximum_){
+      ROS_INFO("11 static:: min_i=%d,max_i=%d,min_j=%d,max_j=%d",min_i,max_i,min_j,max_j);
       updateWithTrueOverwrite(master_grid, min_i, min_j, max_i, max_j);
-      ROS_INFO("min_i = %d,min_j = %d,max_i = %d,max_j = %d ", min_i,min_j,max_i,max_j);
     }
-    else
+    else{
       updateWithMax(master_grid, min_i, min_j, max_i, max_j);
+      ROS_INFO("22 static:: min_i=%d,max_i=%d,min_j=%d,max_j=%d",min_i,max_i,min_j,max_j);
+    }
   }
   else
   {
     // If rolling window, the master_grid is unlikely to have same coordinates as this layer
     unsigned int mx, my;
     double wx, wy;
+    cv::Mat staticMat(max_j,max_i,CV_8U,cv::Scalar(0));
     // Might even be in a different frame
     tf::StampedTransform transform;
     try
@@ -335,6 +355,7 @@ void StaticLayer::updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, int
       ROS_ERROR("%s", ex.what());
       return;
     }
+
     // Copy map data given proper transformations
     for (unsigned int i = min_i; i < max_i; ++i)
     {
@@ -350,38 +371,17 @@ void StaticLayer::updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, int
         {
           if (!use_maximum_){
             master_grid.setCost(i, j, getCost(mx, my));
-            if ((int)getCost(mx,my) > 254)
-              staticMap.at<unsigned char>(i,j) = 0;
+            if ((int)getCost(mx,my) >= 254)
+              staticMat.at<unsigned char>(i,j) = 0;
             else if ((int)getCost(mx,my) == 0)
-              staticMap.at<unsigned char>(i,j) = 255;
+              staticMat.at<unsigned char>(i,j) = 255;
           }
           else
             master_grid.setCost(i, j, std::max(getCost(mx, my), master_grid.getCost(i, j)));
         }
       }
     }
-
-    if(max_i == 200){
-      std::ofstream staticData("staticData");
-      cv::warpAffine(staticMap,staticRotateResult,rotateMat,staticMap.size());
-      for (unsigned int j = 100; j <= 120; j++){
-        for (unsigned int i = 94; i <= 106; i++){
-          if ((int)staticRotateResult.at<unsigned char>(j,i) > 128)
-            middleStaticMap.at<unsigned char>(j - 100,i - 94) = 255;
-          else
-            middleStaticMap.at<unsigned char>(j - 100,i - 94) = 0;
-          staticData << (int)middleStaticMap.at<unsigned char>(j - 100,i - 94) << " " ;
-        }
-        staticData << std::endl;
-      }
-      staticData.close();
-      // cv::imshow("staticRotateResult",staticRotateResult);
-      // cv::waitKey(1);
-      // cv::imshow("middleStaticMap",middleStaticMap);
-      // cv::waitKey(1);
-      // cv::imshow("staticMap",staticMap);
-      // cv::waitKey(1);
-    }
+    getLocalStaticMat(staticMat, max_i, max_j);
   }
 }
 

@@ -47,7 +47,6 @@
 #include <geometry_msgs/PolygonStamped.h>
 #include <dynamic_reconfigure/server.h>
 #include <pluginlib/class_loader.h>
-#include <robotstatus_msgs/Obstacle.h>
 #include "std_msgs/Float32.h"
 
 class SuperValue : public XmlRpc::XmlRpcValue
@@ -251,7 +250,6 @@ private:
   ros::Subscriber footprint_sub_;
   ros::Publisher footprint_pub_;
   ros::Publisher obstacle_distance_pub_;
-  
   bool got_footprint_;
   std::vector<geometry_msgs::Point> unpadded_footprint_;
   std::vector<geometry_msgs::Point> padded_footprint_;

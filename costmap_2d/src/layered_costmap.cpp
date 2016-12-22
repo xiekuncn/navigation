@@ -41,14 +41,13 @@
 #include <string>
 #include <algorithm>
 #include <vector>
-#include <fstream>
 
 using std::vector;
 
 namespace costmap_2d
 {
 
-float LayeredCostmap::obstacleResult_ = 0.0;
+float LayeredCostmap::obstacle_distance_ = 0.0;
 
 LayeredCostmap::LayeredCostmap(std::string global_frame, bool rolling_window, bool track_unknown) :
     costmap_(), global_frame_(global_frame), rolling_window_(rolling_window), initialized_(false), size_locked_(false)
@@ -79,18 +78,19 @@ void LayeredCostmap::resizeMap(unsigned int size_x, unsigned int size_y, double 
   }
 }
 
+
 float LayeredCostmap::getObstacleResult(){
-  return obstacleResult_;
+  return obstacle_distance_;
 }
 
 void LayeredCostmap::isObstacle(cv::Mat staticMat, cv::Mat inflationMat){
-  cv::Mat deltaMat(21,13,CV_8U,cv::Scalar(0));
+  cv::Mat deltaMat(CUT_HEIGHT, CUT_WIDTH,CV_8U,cv::Scalar(0));
   deltaMat = staticMat - inflationMat;
   int count = 0;
   unsigned int closest_pixel = 30;
 
-  for (unsigned int w = 0; w <= 12; w++){
-    for (unsigned int h = 0; h <= 20; h++){
+  for (unsigned int w = 0; w < CUT_WIDTH; w++){
+    for (unsigned int h = 0; h < CUT_HEIGHT; h++){
       if((int)deltaMat.at<unsigned char>(h,w) == 255){
          if( h < closest_pixel){
           closest_pixel = h;
@@ -100,11 +100,15 @@ void LayeredCostmap::isObstacle(cv::Mat staticMat, cv::Mat inflationMat){
 
     }
   }
+
   if (count >= 2 && closest_pixel < 30){
-    obstacleResult_ = (closest_pixel + 1) * 0.05;
+    obstacle_distance_ = (closest_pixel + 1) * 0.05;
   } else {
-    obstacleResult_ = -1.0;
+    obstacle_distance_ = -1.0;
   }
+  ROS_INFO("                 ");
+  ROS_INFO("obstacle_distance_ = %f",obstacle_distance_);
+  ROS_INFO("                  ");
 }
 
 void LayeredCostmap::updateMap(double robot_x, double robot_y, double robot_yaw)
@@ -112,7 +116,8 @@ void LayeredCostmap::updateMap(double robot_x, double robot_y, double robot_yaw)
   // Lock for the remainder of this function, some plugins (e.g. VoxelLayer)
   // implement thread unsafe updateBounds() functions.
   boost::unique_lock<Costmap2D::mutex_t> lock(*(costmap_.getMutex()));
-  int global = 0;
+  ROS_INFO("sizeX = %f   sizeY = %f",costmap_.getSizeInMetersX(),costmap_.getSizeInMetersY());
+
   // if we're using a rolling buffer costmap... we need to update the origin using the robot's position
   if (rolling_window_)
   {
@@ -127,13 +132,16 @@ void LayeredCostmap::updateMap(double robot_x, double robot_y, double robot_yaw)
   minx_ = miny_ = 1e30;
   maxx_ = maxy_ = -1e30;
 
+  int count = 0;
   for (vector<boost::shared_ptr<Layer> >::iterator plugin = plugins_.begin(); plugin != plugins_.end();
        ++plugin)
   {
+    count++;
     double prev_minx = minx_;
     double prev_miny = miny_;
     double prev_maxx = maxx_;
     double prev_maxy = maxy_;
+    
     (*plugin)->updateBounds(robot_x, robot_y, robot_yaw, &minx_, &miny_, &maxx_, &maxy_);
     if (minx_ > prev_minx || miny_ > prev_miny || maxx_ < prev_maxx || maxy_ < prev_maxy)
     {
@@ -144,6 +152,8 @@ void LayeredCostmap::updateMap(double robot_x, double robot_y, double robot_yaw)
                         (*plugin)->getName().c_str());
     }
   }
+  ROS_INFO("layer size = %d",count);
+
 
   int x0, xn, y0, yn;
   costmap_.worldToMapEnforceBounds(minx_, miny_, x0, y0);
@@ -153,23 +163,23 @@ void LayeredCostmap::updateMap(double robot_x, double robot_y, double robot_yaw)
   xn = std::min(int(costmap_.getSizeInCellsX()), xn + 1);
   y0 = std::max(0, y0);
   yn = std::min(int(costmap_.getSizeInCellsY()), yn + 1);
+  ROS_INFO("layered_costmap:: x0=%d,xn=%d,y0=%d,yn=%d",x0,xn,y0,yn);
 
-  //ROS_INFO("Updating area x: [%d, %d] y: [%d, %d]", x0, xn, y0, yn);
+  ROS_INFO("Updating area x: [%d, %d] y: [%d, %d]", x0, xn, y0, yn);
 
   if (xn < x0 || yn < y0)
     return;
+
   costmap_.resetMap(x0, y0, xn, yn);
-  
-  for (vector<boost::shared_ptr<Layer> >::iterator plugin = plugins_.begin(); plugin != plugins_.end(); ++plugin)
+  for (vector<boost::shared_ptr<Layer> >::iterator plugin = plugins_.begin(); plugin != plugins_.end();
+       ++plugin)
   {
     (*plugin)->updateCosts(costmap_, x0, y0, xn, yn);
   }
 
-  if(xn == 200){
-    // std::ofstream firstLayer("firstLayer");
-    cv::Mat oneLayer(21,13,CV_8U,cv::Scalar(0));
-    // std::ofstream thirdLayer("thirdLayer");
-    cv::Mat threeLayer(21,13,CV_8U,cv::Scalar(0));
+  if(x0 == 0){
+    cv::Mat oneLayer(CUT_HEIGHT, CUT_WIDTH,CV_8U,cv::Scalar(0));
+    cv::Mat threeLayer(CUT_HEIGHT, CUT_WIDTH,CV_8U,cv::Scalar(0));
     for (vector<boost::shared_ptr<Layer> >::iterator plugin = plugins_.begin(); plugin != plugins_.end(); ++plugin)
     {
       if(plugin == plugins_.begin())  // static layer

@@ -1,7 +1,7 @@
 #include <costmap_2d/costmap_layer.h>
+#include <fstream>
 #include <opencv2/opencv.hpp>
 #include <cv_bridge/cv_bridge.h>
-#include <fstream>
 
 namespace costmap_2d
 {
@@ -54,7 +54,6 @@ void CostmapLayer::updateWithMax(costmap_2d::Costmap2D& master_grid, int min_i, 
   unsigned char* master_array = master_grid.getCharMap();
   unsigned int span = master_grid.getSizeInCellsX();
 
-  // ROS_INFO("CostmapLayer::updateWithMax-> min_i = %d,min_j = %d,max_i = %d,max_j = %d ", min_i,min_j,max_i,max_j);
   for (int j = min_j; j < max_j; j++)
   {
     unsigned int it = j * span + min_i;
@@ -66,10 +65,8 @@ void CostmapLayer::updateWithMax(costmap_2d::Costmap2D& master_grid, int min_i, 
       }
 
       unsigned char old_cost = master_array[it];
-      if (old_cost == NO_INFORMATION || old_cost < costmap_[it]){
+      if (old_cost == NO_INFORMATION || old_cost < costmap_[it])
         master_array[it] = costmap_[it];
-      }
-     
       it++;
     }
   }
@@ -78,20 +75,29 @@ void CostmapLayer::updateWithMax(costmap_2d::Costmap2D& master_grid, int min_i, 
 void CostmapLayer::updateWithTrueOverwrite(costmap_2d::Costmap2D& master_grid, int min_i, int min_j,
                                            int max_i, int max_j)
 {
+  std::ofstream new_static("newstatic");
+
   if (!enabled_)
     return;
   unsigned char* master = master_grid.getCharMap();
   unsigned int span = master_grid.getSizeInCellsX();
+  
+  ROS_INFO("master : X = %f  Y = %f",master_grid.getSizeInMetersX(),master_grid.getSizeInMetersY());
+  // ROS_INFO("costmap_ : X = %f  Y = %f",costmap_.getSizeInMetersX(),costmap_.getSizeInMetersY());  
 
   for (int j = min_j; j < max_j; j++)
   {
     unsigned int it = span*j+min_i;
     for (int i = min_i; i < max_i; i++)
     {
+      new_static << (int)costmap_[it] << " ";
       master[it] = costmap_[it];
       it++;
     }
+    new_static << std::endl;
   }
+  new_static.close();
+
 }
 
 void CostmapLayer::updateWithOverwrite(costmap_2d::Costmap2D& master_grid, int min_i, int min_j, int max_i, int max_j)

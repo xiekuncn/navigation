@@ -65,7 +65,6 @@ Costmap2DROS::Costmap2DROS(std::string name, tf::TransformListener& tf) :
     robot_stopped_(false), map_update_thread_(NULL), last_publish_(0),
     plugin_loader_("costmap_2d", "costmap_2d::Layer"), publisher_(NULL)
 {
-  ROS_INFO("My Init!");
   ros::NodeHandle private_nh("~/" + name);
   ros::NodeHandle g_nh;
 
@@ -102,9 +101,10 @@ Costmap2DROS::Costmap2DROS(std::string name, tf::TransformListener& tf) :
 
   // check if we want a rolling window version of the costmap
   bool rolling_window, track_unknown_space, always_send_full_costmap;
-  private_nh.param("rolling_window", rolling_window, true);
+  private_nh.param("rolling_window", rolling_window, false);
   private_nh.param("track_unknown_space", track_unknown_space, false);
   private_nh.param("always_send_full_costmap", always_send_full_costmap, false);
+  // rolling_window = true;
 
   layered_costmap_ = new LayeredCostmap(global_frame_, rolling_window, track_unknown_space);
 
@@ -117,7 +117,6 @@ Costmap2DROS::Costmap2DROS(std::string name, tf::TransformListener& tf) :
   {
     XmlRpc::XmlRpcValue my_list;
     private_nh.getParam("plugins", my_list);
-    ROS_INFO("plugins --  my_list.size = %d ",my_list.size());
     for (int32_t i = 0; i < my_list.size(); ++i)
     {
       std::string pname = static_cast<std::string>(my_list[i]["name"]);
@@ -286,9 +285,13 @@ void Costmap2DROS::reconfigureCB(costmap_2d::Costmap2DConfig &config, uint32_t l
   double map_width_meters = config.width, map_height_meters = config.height, resolution = config.resolution, origin_x =
              config.origin_x,
          origin_y = config.origin_y;
-
+  ROS_INFO("$$ map_width_meters = %f " ,map_width_meters/ resolution);
+  ROS_INFO("$$ map_height_meters = %f " ,map_height_meters/ resolution);
+  ROS_INFO("$$ map_height_meters = %f " ,map_height_meters/ resolution);
+  
   if (!layered_costmap_->isSizeLocked())
   {
+    ROS_INFO("Run resize !");
     layered_costmap_->resizeMap((unsigned int)(map_width_meters / resolution),
                                 (unsigned int)(map_height_meters / resolution), resolution, origin_x, origin_y);
   }
@@ -377,14 +380,14 @@ void Costmap2DROS::movementCB(const ros::TimerEvent &event)
 
 void Costmap2DROS::mapUpdateLoop(double frequency)
 {
-  // the user might not want to run the loop every cycle
   std_msgs::Float32 obstacle_msg;
 
+  // the user might not want to run the loop every cycle
   if (frequency == 0.0)
     return;
-  
+
   ros::NodeHandle nh;
-  obstacle_distance_pub_ = nh.advertise< std_msgs::Float32 > ("costmap_2d/obstacle_distance",10);
+  obstacle_distance_pub_ = nh.advertise<std_msgs::Float32>("costmap_2d/obstacle_distance", 10);
   ros::Rate r(frequency);
   while (nh.ok() && !map_update_thread_shutdown_)
   {
@@ -394,8 +397,6 @@ void Costmap2DROS::mapUpdateLoop(double frequency)
 
     updateMap();
     obstacle_msg.data = layered_costmap_->getObstacleResult();
-    // ROS_INFO("obstacle_distance = %f !!", obstacle_msg.data);
-    
     obstacle_distance_pub_.publish(obstacle_msg);
 
     gettimeofday(&end, NULL);
@@ -436,6 +437,8 @@ void Costmap2DROS::updateMap()
              y = pose.getOrigin().y(),
              yaw = tf::getYaw(pose.getRotation());
 
+      ROS_INFO(" x = %f, y = %f , yaw = %f", x, y, yaw);
+      
       layered_costmap_->updateMap(x, y, yaw);
 
       geometry_msgs::PolygonStamped footprint;

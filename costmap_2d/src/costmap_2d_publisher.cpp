@@ -39,44 +39,8 @@
 #include <costmap_2d/costmap_2d_publisher.h>
 #include <costmap_2d/cost_values.h>
 
-#include <ros/console.h>
-#include <execinfo.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <iostream>
-
 namespace costmap_2d
 {
-
-void dump_trace() {
-    void *stack_trace[5] = {0};
-    char **stack_strings = NULL;
-    int stack_depth = 0;
-    int i = 0;
-
-    /* 获取栈中各层调用函数地址 */
-    stack_depth = backtrace(stack_trace, 5);
-
-    /* 查找符号表将函数调用地址转换为函数名称 */
-    stack_strings = (char **)backtrace_symbols(stack_trace, stack_depth);
-    if (NULL == stack_strings) {
-        ROS_INFO(" Memory is not enough while dump Stack Trace! \r\n");
-        return;
-    }
-
-    /* 打印调用栈 */
-    ROS_INFO(" Stack Trace: \r\n");
-    for (i = 0; i < stack_depth; ++i) {
-        ROS_INFO(" [%d] %s \r\n", i, stack_strings[i]);
-    }
-
-    /* 获取函数名称时申请的内存需要自行释放 */
-    free(stack_strings);
-    stack_strings = NULL;
-
-    return;
-}
-
 
 char* Costmap2DPublisher::cost_translation_table_ = NULL;
 
@@ -85,10 +49,10 @@ Costmap2DPublisher::Costmap2DPublisher(ros::NodeHandle * ros_node, Costmap2D* co
     node(ros_node), costmap_(costmap), global_frame_(global_frame), active_(false),
     always_send_full_costmap_(always_send_full_costmap)
 {
-
   costmap_pub_ = ros_node->advertise<nav_msgs::OccupancyGrid>(topic_name, 1,
                                                     boost::bind(&Costmap2DPublisher::onNewSubscription, this, _1));
   costmap_update_pub_ = ros_node->advertise<map_msgs::OccupancyGridUpdate>(topic_name + "_updates", 1);
+
   if (cost_translation_table_ == NULL)
   {
     cost_translation_table_ = new char[256];
@@ -194,7 +158,6 @@ void Costmap2DPublisher::publishCostmap()
         update.data[i++] = cost_translation_table_[ cost ];
       }
     }
-    
     costmap_update_pub_.publish(update);
   }
 

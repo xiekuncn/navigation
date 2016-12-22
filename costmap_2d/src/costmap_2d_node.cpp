@@ -40,11 +40,6 @@
 
 int main(int argc, char** argv)
 {
-  if(ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME,ros::console::levels::Debug)){
-    ros::console::notifyLoggerLevelsChanged();
-  }
-  ROS_INFO("Init the costmap_node ");
-  
   ros::init(argc, argv, "costmap_node");
   tf::TransformListener tf(ros::Duration(10));
   costmap_2d::Costmap2DROS lcr("costmap", tf);
