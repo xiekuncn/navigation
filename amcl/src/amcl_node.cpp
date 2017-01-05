@@ -66,6 +66,8 @@
 #include <rosbag/view.h>
 #include <boost/foreach.hpp>
 
+#include <amcl/PoseWithWeightArray.h>
+
 #define NEW_UNIFORM_SAMPLING 1
 
 using namespace amcl;
@@ -233,6 +235,8 @@ class AmclNode
     ros::NodeHandle private_nh_;
     ros::Publisher pose_pub_;
     ros::Publisher particlecloud_pub_;
+    ros::Publisher pose_with_weight_pub_;
+    long iterate_time_;
     ros::ServiceServer global_loc_srv_;
     ros::ServiceServer nomotion_update_srv_; //to let amcl update samples without requiring motion
     ros::ServiceServer set_map_srv_;
@@ -421,6 +425,8 @@ AmclNode::AmclNode() :
 
   pose_pub_ = nh_.advertise<geometry_msgs::PoseWithCovarianceStamped>("amcl_pose", 2, true);
   particlecloud_pub_ = nh_.advertise<geometry_msgs::PoseArray>("particlecloud", 2, true);
+  pose_with_weight_pub_ = nh_.advertise<amcl::PoseWithWeightArray>("pose_with_weight_array", 2, true);
+  iterate_time_ = 0;
   global_loc_srv_ = nh_.advertiseService("global_localization", 
 					 &AmclNode::globalLocalizationCallback,
                                          this);
@@ -1242,17 +1248,26 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
     // TODO: set maximum rate for publishing
     if (!m_force_update) {
       geometry_msgs::PoseArray cloud_msg;
+      amcl::PoseWithWeightArray weight_msg;
       cloud_msg.header.stamp = ros::Time::now();
       cloud_msg.header.frame_id = global_frame_id_;
       cloud_msg.poses.resize(set->sample_count);
+      weight_msg.header.stamp = ros::Time::now();
+      weight_msg.header.frame_id = global_frame_id_;
+      weight_msg.poses.resize(set->sample_count);
+      weight_msg.iterate_time = iterate_time_;
+      ++iterate_time_;
       for(int i=0;i<set->sample_count;i++)
       {
         tf::poseTFToMsg(tf::Pose(tf::createQuaternionFromYaw(set->samples[i].pose.v[2]),
                                  tf::Vector3(set->samples[i].pose.v[0],
                                            set->samples[i].pose.v[1], 0)),
                         cloud_msg.poses[i]);
+        weight_msg.poses[i] = cloud_msg.poses[i];
+        weight_msg.weights[i] = set->samples[i].weight;
       }
       particlecloud_pub_.publish(cloud_msg);
+      pose_with_weight_pub_.publish(weight_msg);
     }
   }
 

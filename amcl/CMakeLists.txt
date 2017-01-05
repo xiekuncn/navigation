@@ -8,9 +8,17 @@ find_package(catkin REQUIRED
             tf
             dynamic_reconfigure
             nav_msgs
+            std_msgs
+            geometry_msgs
+            message_generation
         )
 
 find_package(Boost REQUIRED)
+
+add_message_files(DIRECTORY msg
+                  FILES PoseWithWeightArray.msg)
+
+generate_messages(DEPENDENCIES std_msgs geometry_msgs)
 
 # dynamic reconfigure
 generate_dynamic_reconfigure_options(
@@ -22,6 +30,9 @@ catkin_package(
         rosbag
         roscpp
         dynamic_reconfigure
+        message_runtime
+        std_msgs
+        geometry_msgs
         tf
   INCLUDE_DIRS include
   LIBRARIES amcl_sensors amcl_map amcl_pf
@@ -54,7 +65,11 @@ target_link_libraries(amcl_sensors amcl_map amcl_pf)
 
 add_executable(amcl
                        src/amcl_node.cpp)
-add_dependencies(amcl amcl_gencfg)
+add_dependencies(amcl 
+                amcl_gencfg 
+                ${catkin_EXPORTED_TARGETS}
+                ${${PROJECT_NAME}_EXPORTED_TARGETS}
+                )
 
 target_link_libraries(amcl
     amcl_sensors amcl_map amcl_pf
