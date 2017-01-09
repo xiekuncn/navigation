@@ -67,6 +67,8 @@
 #include <boost/foreach.hpp>
 
 #include <amcl/PoseWithWeightArray.h>
+#include <amcl/PoseWithCovarianceArrayStamped.h>
+#include <geometry_msgs/PolygonStamped.h>
 
 #define NEW_UNIFORM_SAMPLING 1
 
@@ -155,6 +157,8 @@ class AmclNode
 
     void laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan);
     void initialPoseReceived(const geometry_msgs::PoseWithCovarianceStampedConstPtr& msg);
+    void initialPosesReceived(const amcl::PoseWithCovarianceArrayStamped& msg);
+    void initialPolygonReceived(const geometry_msgs::PolygonStamped& msg);
     void handleInitialPoseMessage(const geometry_msgs::PoseWithCovarianceStamped& msg);
     void mapReceived(const nav_msgs::OccupancyGridConstPtr& msg);
 
@@ -193,6 +197,8 @@ class AmclNode
     message_filters::Subscriber<sensor_msgs::LaserScan>* laser_scan_sub_;
     tf::MessageFilter<sensor_msgs::LaserScan>* laser_scan_filter_;
     ros::Subscriber initial_pose_sub_;
+    ros::Subscriber initial_poses_sub_;
+    ros::Subscriber initial_polygon_sub_;
     std::vector< AMCLLaser* > lasers_;
     std::vector< bool > lasers_update_;
     std::map< std::string, int > frame_to_laser_;
@@ -442,6 +448,8 @@ AmclNode::AmclNode() :
   laser_scan_filter_->registerCallback(boost::bind(&AmclNode::laserReceived,
                                                    this, _1));
   initial_pose_sub_ = nh_.subscribe("initialpose", 2, &AmclNode::initialPoseReceived, this);
+  initial_poses_sub_ = nh_.subscribe("initialposes", 2, &AmclNode::initialPosesReceived, this);
+  initial_polygon_sub_ = nh_.subscribe("initialpolygon", 2, &AmclNode::initialPolygonReceived, this);
 
   if(use_map_topic_) {
     map_sub_ = nh_.subscribe("map", 1, &AmclNode::mapReceived, this);
@@ -603,6 +611,8 @@ void AmclNode::reconfigureCB(AMCLConfig &config, uint32_t level)
                                                    this, _1));
 
   initial_pose_sub_ = nh_.subscribe("initialpose", 2, &AmclNode::initialPoseReceived, this);
+  initial_poses_sub_ = nh_.subscribe("initialposes", 2, &AmclNode::initialPosesReceived, this);
+  initial_polygon_sub_ = nh_.subscribe("initialpolygon", 2, &AmclNode::initialPolygonReceived, this);
 }
 
 
@@ -1432,6 +1442,92 @@ AmclNode::getYaw(tf::Pose& t)
   double yaw, pitch, roll;
   t.getBasis().getEulerYPR(yaw,pitch,roll);
   return yaw;
+}
+
+void 
+AmclNode::initialPosesReceived(const amcl::PoseWithCovarianceArrayStamped& msg)
+{
+  boost::recursive_mutex::scoped_lock prl(configuration_mutex_);
+  if(msg.header.frame_id == "")
+  {
+    // This should be removed at some point
+    ROS_WARN("Received initial pose with empty frame_id.  You should always supply a frame_id.");
+  }
+  // We only accept initial pose estimates in the global frame, #5148.
+  else if(tf_->resolve(msg.header.frame_id) != tf_->resolve(global_frame_id_))
+  {
+    ROS_WARN("Ignoring initial pose in frame \"%s\"; initial poses must be in the global frame, \"%s\"",
+             msg.header.frame_id.c_str(),
+             global_frame_id_.c_str());
+    return;
+  }
+
+  // In case the client sent us a pose estimate in the past, integrate the
+  // intervening odometric change.
+  tf::StampedTransform tx_odom;
+  try
+  {
+    ros::Time now = ros::Time::now();
+    // wait a little for the latest tf to become available
+    tf_->waitForTransform(base_frame_id_, msg.header.stamp,
+                         base_frame_id_, now,
+                         odom_frame_id_, ros::Duration(0.5));
+    tf_->lookupTransform(base_frame_id_, msg.header.stamp,
+                         base_frame_id_, now,
+                         odom_frame_id_, tx_odom);
+  }
+  catch(tf::TransformException e)
+  {
+    // If we've never sent a transform, then this is normal, because the
+    // global_frame_id_ frame doesn't exist.  We only care about in-time
+    // transformation for on-the-move pose-setting, so ignoring this
+    // startup condition doesn't really cost us anything.
+    if(sent_first_transform_)
+      ROS_WARN("Failed to transform initial pose in time (%s)", e.what());
+    tx_odom.setIdentity();
+  }
+  pf_vector_t* means = (pf_vector_t*)malloc((sizeof(pf_vector_t)) * msg.pose_with_covariance_array.size());
+  pf_matrix_t* covs = (pf_matrix_t*)malloc((sizeof(pf_matrix_t)) * msg.pose_with_covariance_array.size());
+  for (int index = 0; index < msg.pose_with_covariance_array.size(); ++index)
+  {
+    tf::Pose pose_old, pose_new;
+    tf::poseMsgToTF(msg.pose_with_covariance_array[index].pose, pose_old);
+    pose_new = pose_old * tx_odom;
+
+    // Transform into the global frame
+
+    ROS_INFO("Setting pose (%.6f): %.3f %.3f %.3f",
+             ros::Time::now().toSec(),
+             pose_new.getOrigin().x(),
+             pose_new.getOrigin().y(),
+             getYaw(pose_new));
+    // Re-initialize the filter
+    pf_vector_t* mean = (means + index);
+    mean->v[0] = pose_new.getOrigin().x();
+    mean->v[1] = pose_new.getOrigin().y();
+    mean->v[2] = getYaw(pose_new);
+    pf_matrix_t* cov = (covs + index);
+    // Copy in the covariance, converting from 6-D to 3-D
+    for(int i=0; i<2; i++)
+    {
+      for(int j=0; j<2; j++)
+      {
+        cov->m[i][j] = msg.pose_with_covariance_array[index].covariance[6*i+j];
+      }
+    }
+    cov->m[2][2] = msg.pose_with_covariance_array[index].covariance[6*5+5];
+  }  
+  pf_init_with_mutil_poses(pf_, means, covs, msg.pose_with_covariance_array.size());
+  free(means);
+  free(covs);
+  means = NULL;
+  covs = NULL;
+}
+
+void 
+AmclNode::initialPolygonReceived(const geometry_msgs::PolygonStamped& msg)
+{
+
 }
 
 void

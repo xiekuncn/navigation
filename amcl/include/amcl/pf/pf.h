@@ -148,6 +148,11 @@ pf_t *pf_alloc(int min_samples, int max_samples,
 // Free an existing filter
 void pf_free(pf_t *pf);
 
+// add by Bill.xie
+// initialize the filter using more than one pose,
+// every pose using a guassian
+void pf_init_with_mutil_poses(pf_t *pf, pf_vector_t* means, pf_matrix_t* covs, int size);
+
 // Initialize the filter using a guassian
 void pf_init(pf_t *pf, pf_vector_t mean, pf_matrix_t cov);
 

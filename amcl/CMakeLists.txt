@@ -16,7 +16,8 @@ find_package(catkin REQUIRED
 find_package(Boost REQUIRED)
 
 add_message_files(DIRECTORY msg
-                  FILES PoseWithWeightArray.msg)
+                  FILES PoseWithWeightArray.msg
+                        PoseWithCovarianceArrayStamped.msg)
 
 generate_messages(DEPENDENCIES std_msgs geometry_msgs)
 
