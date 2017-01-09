@@ -130,6 +130,7 @@ void pf_free(pf_t *pf)
 
 void pf_init_with_mutil_poses(pf_t *pf, pf_vector_t* means, pf_matrix_t* covs, int size)
 {
+  printf("init with mutil poses....");
   int i;
   int sample_count = 0;
   pf_sample_set_t *set;
@@ -145,7 +146,9 @@ void pf_init_with_mutil_poses(pf_t *pf, pf_vector_t* means, pf_matrix_t* covs, i
 
   int index;
   for (index = 0; index < size; ++index) {
-    pdf = pf_pdf_gaussian_alloc(*(means + index), *(covs + index));
+    pf_vector_t *mean = means + index;
+    pf_matrix_t *cov = covs + index;
+    pdf = pf_pdf_gaussian_alloc(*mean, *cov);
     
     // keep the total sample count equals max_samples.
     if (index == size - 1)
@@ -159,7 +162,7 @@ void pf_init_with_mutil_poses(pf_t *pf, pf_vector_t* means, pf_matrix_t* covs, i
     // Compute the new sample poses
     for (i = 0; i < sample_count; i++)
     {
-      sample = set->samples + i;
+      sample = set->samples + i + index * (set->sample_count / size);
       sample->weight = 1.0 / pf->max_samples;
       sample->pose = pf_pdf_gaussian_sample(pdf);
 
@@ -180,7 +183,7 @@ void pf_init_with_mutil_poses(pf_t *pf, pf_vector_t* means, pf_matrix_t* covs, i
   return;
 }
 
-// Initialize the filter using a guassian
+// initialize the filter using a guassian
 void pf_init(pf_t *pf, pf_vector_t mean, pf_matrix_t cov)
 {
   int i;
@@ -222,7 +225,7 @@ void pf_init(pf_t *pf, pf_vector_t mean, pf_matrix_t cov)
 }
 
 
-// Initialize the filter using some model
+// initialize the filter using some model
 void pf_init_model(pf_t *pf, pf_init_model_fn_t init_fn, void *init_data)
 {
   int i;
@@ -298,7 +301,7 @@ int pf_update_converged(pf_t *pf)
   return 1; 
 }
 
-// Update the filter with some new action
+// update the filter with some new action
 void pf_update_action(pf_t *pf, pf_action_model_fn_t action_fn, void *action_data)
 {
   pf_sample_set_t *set;
@@ -312,7 +315,7 @@ void pf_update_action(pf_t *pf, pf_action_model_fn_t action_fn, void *action_dat
 
 
 #include <float.h>
-// Update the filter with some new sensor observation
+// update the filter with some new sensor observation
 void pf_update_sensor(pf_t *pf, pf_sensor_model_fn_t sensor_fn, void *sensor_data)
 {
   int i;
@@ -365,7 +368,7 @@ void pf_update_sensor(pf_t *pf, pf_sensor_model_fn_t sensor_fn, void *sensor_dat
 }
 
 
-// Resample the distribution
+// resample the distribution
 void pf_update_resample(pf_t *pf)
 {
   int i;
@@ -500,7 +503,7 @@ void pf_update_resample(pf_t *pf)
 }
 
 
-// Compute the required number of samples, given that there are k bins
+// compute the required number of samples, given that there are k bins
 // with samples in them.  This is taken directly from Fox et al.
 int pf_resample_limit(pf_t *pf, int k)
 {
@@ -526,7 +529,7 @@ int pf_resample_limit(pf_t *pf, int k)
 }
 
 
-// Re-compute the cluster statistics for a sample set
+// re-compute the cluster statistics for a sample set
 void pf_cluster_stats(pf_t *pf, pf_sample_set_t *set)
 {
   int i, j, k, cidx;
@@ -575,7 +578,7 @@ void pf_cluster_stats(pf_t *pf, pf_sample_set_t *set)
   {
     sample = set->samples + i;
 
-    //printf("%d %f %f %f\n", i, sample->pose.v[0], sample->pose.v[1], sample->pose.v[2]);
+    // printf("%d %f %f %f\n", i, sample->pose.v[0], sample->pose.v[1], sample->pose.v[2]);
 
     // Get the cluster label for this sample
     cidx = pf_kdtree_get_cluster(set->kdtree, sample->pose);
@@ -658,7 +661,7 @@ void pf_cluster_stats(pf_t *pf, pf_sample_set_t *set)
 }
 
 
-// Compute the CEP statistics (mean and variance).
+// compute the CEP statistics (mean and variance).
 void pf_get_cep_stats(pf_t *pf, pf_vector_t *mean, double *var)
 {
   int i;
@@ -694,7 +697,7 @@ void pf_get_cep_stats(pf_t *pf, pf_vector_t *mean, double *var)
 }
 
 
-// Get the statistics for a particular cluster.
+// get the statistics for a particular cluster.
 int pf_get_cluster_stats(pf_t *pf, int clabel, double *weight,
                          pf_vector_t *mean, pf_matrix_t *cov)
 {

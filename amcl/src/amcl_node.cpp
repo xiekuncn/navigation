@@ -1515,6 +1515,10 @@ AmclNode::initialPosesReceived(const amcl::PoseWithCovarianceArrayStamped& msg)
         cov->m[i][j] = msg.pose_with_covariance_array[index].covariance[6*i+j];
       }
     }
+    cov->m[0][2] = 0;
+    cov->m[1][2] = 0;
+    cov->m[2][0] = 0;
+    cov->m[2][1] = 0;
     cov->m[2][2] = msg.pose_with_covariance_array[index].covariance[6*5+5];
   }  
   pf_init_with_mutil_poses(pf_, means, covs, msg.pose_with_covariance_array.size());
@@ -1522,6 +1526,7 @@ AmclNode::initialPosesReceived(const amcl::PoseWithCovarianceArrayStamped& msg)
   free(covs);
   means = NULL;
   covs = NULL;
+  pf_init_ = false;
 }
 
 void 
