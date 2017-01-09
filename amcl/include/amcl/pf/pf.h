@@ -63,6 +63,10 @@ typedef struct
 
   // Weight for this pose
   double weight;
+
+  // add by Bill.xie
+  // weight without nomalizing
+  double origin_weight;
   
 } pf_sample_t;
 

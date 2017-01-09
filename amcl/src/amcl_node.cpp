@@ -1255,6 +1255,7 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
       weight_msg.header.stamp = ros::Time::now();
       weight_msg.header.frame_id = global_frame_id_;
       weight_msg.poses.resize(set->sample_count);
+      weight_msg.weights.resize(set->sample_count);
       weight_msg.iterate_time = iterate_time_;
       ++iterate_time_;
       for(int i=0;i<set->sample_count;i++)
@@ -1264,7 +1265,7 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
                                            set->samples[i].pose.v[1], 0)),
                         cloud_msg.poses[i]);
         weight_msg.poses[i] = cloud_msg.poses[i];
-        weight_msg.weights[i] = set->samples[i].weight;
+        weight_msg.weights[i] = set->samples[i].origin_weight;
       }
       particlecloud_pub_.publish(cloud_msg);
       pose_with_weight_pub_.publish(weight_msg);

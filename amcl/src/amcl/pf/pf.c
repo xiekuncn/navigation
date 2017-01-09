@@ -281,6 +281,9 @@ void pf_update_sensor(pf_t *pf, pf_sensor_model_fn_t sensor_fn, void *sensor_dat
     {
       sample = set->samples + i;
       w_avg += sample->weight;
+      // add by Bill.xie
+      sample->origin_weight = sample->weight;
+      // end of add
       sample->weight /= total;
     }
     // Update running averages of likelihood of samples (Prob Rob p258)
