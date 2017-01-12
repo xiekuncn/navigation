@@ -54,7 +54,6 @@ typedef void (*pf_action_model_fn_t) (void *action_data,
 typedef double (*pf_sensor_model_fn_t) (void *sensor_data, 
                                         struct _pf_sample_set_t* set);
 
-
 // Information for a single sample
 typedef struct
 {
@@ -152,6 +151,8 @@ void pf_free(pf_t *pf);
 // initialize the filter using more than one pose,
 // every pose using a guassian
 void pf_init_with_mutil_poses(pf_t *pf, pf_vector_t* means, pf_matrix_t* covs, int size);
+
+void pf_init_with_polygon(pf_t *pf, pf_polygon_t polygon);
 
 // Initialize the filter using a guassian
 void pf_init(pf_t *pf, pf_vector_t mean, pf_matrix_t cov);

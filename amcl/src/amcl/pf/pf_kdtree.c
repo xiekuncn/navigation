@@ -410,6 +410,8 @@ void pf_kdtree_cluster_node(pf_kdtree_t *self, pf_kdtree_node_t *node, int depth
   int nkey[3];
   pf_kdtree_node_t *nnode;
 
+  // find the continued nearber beween (-1 to 1, -1 to 1, -1 to 1)
+  // using water floor.
   for (i = 0; i < 3 * 3 * 3; i++)
   {
     nkey[0] = node->key[0] + (i / 9) - 1;

@@ -1113,6 +1113,7 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
   }
 
 
+
   pf_vector_t delta = pf_vector_zero();
 
   if(pf_init_)
@@ -1532,7 +1533,60 @@ AmclNode::initialPosesReceived(const amcl::PoseWithCovarianceArrayStamped& msg)
 void 
 AmclNode::initialPolygonReceived(const geometry_msgs::PolygonStamped& msg)
 {
+  boost::recursive_mutex::scoped_lock prl(configuration_mutex_);
+  if(msg.header.frame_id == "")
+  {
+    // This should be removed at some point
+    ROS_WARN("Received initial pose with empty frame_id.  You should always supply a frame_id.");
+  }
+  // We only accept initial pose estimates in the global frame, #5148.
+  else if(tf_->resolve(msg.header.frame_id) != tf_->resolve(global_frame_id_))
+  {
+    ROS_WARN("Ignoring initial pose in frame \"%s\"; initial poses must be in the global frame, \"%s\"",
+             msg.header.frame_id.c_str(),
+             global_frame_id_.c_str());
+    return;
+  }
 
+  // In case the client sent us a pose estimate in the past, integrate the
+  // intervening odometric change.
+  tf::StampedTransform tx_odom;
+  try
+  {
+    ros::Time now = ros::Time::now();
+    // wait a little for the latest tf to become available
+    tf_->waitForTransform(base_frame_id_, msg.header.stamp,
+                         base_frame_id_, now,
+                         odom_frame_id_, ros::Duration(0.5));
+    tf_->lookupTransform(base_frame_id_, msg.header.stamp,
+                         base_frame_id_, now,
+                         odom_frame_id_, tx_odom);
+  }
+  catch(tf::TransformException e)
+  {
+    // If we've never sent a transform, then this is normal, because the
+    // global_frame_id_ frame doesn't exist.  We only care about in-time
+    // transformation for on-the-move pose-setting, so ignoring this
+    // startup condition doesn't really cost us anything.
+    if(sent_first_transform_)
+      ROS_WARN("Failed to transform initial pose in time (%s)", e.what());
+    // tx_odom.setIdentity();
+  }
+  pf_polygon_t polygon;
+  polygon.size = msg.polygon.points.size();
+  polygon.points = (pf_vector_t*)malloc(sizeof(pf_vector_t) * polygon.size);
+  for (int i = 0; i < polygon.size; ++i)
+  {
+    tf::Point point_old, point_new;
+    // tf::pointMsgToTF(msg.polygon.points[i], point_old);
+    point_old = tf::Point(msg.polygon.points[i].x, msg.polygon.points[i].y, msg.polygon.points[i].z);
+    point_new = tx_odom .getOrigin() + point_old;
+    polygon.points[i].v[0] = point_new[0];
+    polygon.points[i].v[1] = point_new[1];
+  }
+
+  pf_init_with_polygon(pf_, polygon);
+  pf_init_ = false;
 }
 
 void

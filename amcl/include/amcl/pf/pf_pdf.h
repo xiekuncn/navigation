@@ -37,6 +37,18 @@
 extern "C" {
 #endif
 
+
+/**************************************************************************
+* Uniform Distribution
+* add by Bill.xie xiekun@cvte.com
+**************************************************************************/
+typedef struct
+{
+  pf_polygon_t polygon;
+  double min_x, max_x;
+  double min_y, max_y;
+} pf_pdf_uniform_t;
+
 /**************************************************************************
  * Gaussian
  *************************************************************************/
@@ -59,6 +71,14 @@ typedef struct
 
 } pf_pdf_gaussian_t;
 
+// Create a uniform pdf
+pf_pdf_uniform_t* pf_pdf_uniform_alloc(pf_polygon_t polygon);
+
+// Destory the pdf
+void pf_pdf_uniform_free(pf_pdf_uniform_t* pdf);
+
+// Compute the value of the pdf in the polygon.
+pf_vector_t pf_pdf_uniform_sample(pf_pdf_uniform_t* pdf);
 
 // Create a gaussian pdf
 pf_pdf_gaussian_t *pf_pdf_gaussian_alloc(pf_vector_t x, pf_matrix_t cx);

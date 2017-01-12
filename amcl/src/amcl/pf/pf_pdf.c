@@ -39,6 +39,88 @@ static unsigned int pf_pdf_seed;
 
 
 /**************************************************************************
+* Uniform Distribution
+* add by Bill.xie xiekun@cvte.com
+**************************************************************************/
+
+int contains(pf_pdf_uniform_t* pdf, pf_vector_t test_point)
+{
+  int crossings = 0;
+  int i;
+  for (i = 0; i < pdf->polygon.size; ++i)
+  {
+    pf_vector_t point = pdf->polygon.points[i];
+    pf_vector_t next_point = pdf->polygon.points[(i + 1) % pdf->polygon.size];
+    double slope = (next_point.v[1] - point.v[1]) / (next_point.v[0] - point.v[0]);
+    int cond1 = (point.v[0] <= test_point.v[0]) && (test_point.v[0] < next_point.v[0]);
+    int cond2 = (next_point.v[0] <= test_point.v[0]) && (test_point.v[0] < point.v[0]);
+    int above = (point.v[1] < slope * (test_point.v[0] - point.v[0]) + point.v[1]);
+    if ( (cond1 || cond2) && above)
+      crossings++;
+  }
+  return crossings % 2 != 0;
+}
+
+
+// ignore the v[2] dimention.
+pf_pdf_uniform_t *pf_pdf_uniform_alloc(pf_polygon_t polygon)
+{
+  if (polygon.size < 3)
+    return NULL;
+  pf_pdf_uniform_t* pdf = calloc(1, sizeof(pf_pdf_uniform_t));
+  pdf->polygon.size = polygon.size;
+  pdf->polygon.points = (pf_vector_t*)malloc(sizeof(pf_vector_t) * polygon.size);
+  // point (0, 0) is always insides the polygon.
+  pdf->min_x = pdf->max_x = pdf->min_y = pdf->max_y = 0;
+  int i;
+  for (i = 0; i < polygon.size; ++i)
+  {
+    pdf->polygon.points[i] = polygon.points[i];
+    if (polygon.points[i].v[0] > pdf->max_x)
+    {
+      pdf->max_x = polygon.points[i].v[0];
+    }
+    if (polygon.points[i].v[0] < pdf->min_x)
+    {
+      pdf->min_x = polygon.points[i].v[0];
+    }
+    if (polygon.points[i].v[0] > pdf->max_y)
+    {
+      pdf->max_y = polygon.points[i].v[1];
+    }
+    if (polygon.points[i].v[0] < pdf->min_y)
+    {
+      pdf->min_y = polygon.points[i].v[1];
+    }
+  }
+
+  return pdf;
+}
+
+void pf_pdf_uniform_free(pf_pdf_uniform_t* pdf)
+{
+  free(pdf);
+}
+
+pf_vector_t pf_pdf_uniform_sample(pf_pdf_uniform_t* pdf)
+{
+  double r;
+  pf_vector_t pose;
+
+  do
+  {
+    r = drand48();
+    pose.v[0] = (pdf->max_x - pdf->min_x) * r + pdf->min_x;
+    r = drand48();
+    pose.v[1] = (pdf->max_y - pdf->min_y) * r + pdf->min_y;
+    r = drand48();
+    pose.v[3] = 2 * M_PI * ( r - 0.5);
+  } while(contains(pdf, pose) == 0);
+
+  return pose;
+}
+
+/**************************************************************************
  * Gaussian
  *************************************************************************/
 

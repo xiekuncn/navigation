@@ -33,6 +33,8 @@ extern "C" {
 #endif
 
 #include <stdio.h>
+
+
   
 // The basic vector
 typedef struct
@@ -41,12 +43,18 @@ typedef struct
 } pf_vector_t;
 
 
+typedef struct {
+
+  pf_vector_t * points;
+  int size;
+
+} pf_polygon_t;
+
 // The basic matrix
 typedef struct
 {
   double m[3][3];
 } pf_matrix_t;
-
 
 // Return a zero vector
 pf_vector_t pf_vector_zero();

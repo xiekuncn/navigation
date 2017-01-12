@@ -128,6 +128,45 @@ void pf_free(pf_t *pf)
   return;
 }
 
+void pf_init_with_polygon(pf_t *pf, pf_polygon_t polygon)
+{
+  printf("init with polygon");
+  int i;
+  int sample_count = 0;
+  pf_sample_set_t *set;
+  pf_sample_t *sample;
+  pf_pdf_uniform_t *pdf;
+
+  set = pf->sets + pf->current_set;
+
+  // Create the kd tree for adaptive sampling
+  pf_kdtree_clear(set->kdtree);
+  set->sample_count = pf->max_samples;
+  pdf = pf_pdf_uniform_alloc(polygon);
+
+  // Compute the new sample poses
+  for (i = 0; i < set->sample_count; i++)
+  {
+    sample = set->samples + i;
+    sample->weight = 1.0 / pf->max_samples;
+    sample->pose = pf_pdf_uniform_sample(pdf);
+
+    // Add sample to histogram
+    pf_kdtree_insert(set->kdtree, sample->pose, sample->weight);
+  }
+  pf_pdf_uniform_free(pdf);
+
+  pf->w_slow = pf->w_fast = 0.0;
+
+  // Re-compute cluster statistics
+  pf_cluster_stats(pf, set);
+
+  //set converged to 0
+  pf_init_converged(pf);
+
+  return;
+}
+
 void pf_init_with_mutil_poses(pf_t *pf, pf_vector_t* means, pf_matrix_t* covs, int size)
 {
   printf("init with mutil poses....");
@@ -420,7 +459,7 @@ void pf_update_resample(pf_t *pf)
   {
     sample_b = set_b->samples + set_b->sample_count++;
 
-    if(drand48() < w_diff)
+    if(drand48() < w_diff) // add poses which can be anywhere in the map
       sample_b->pose = (pf->random_pose_fn)(pf->random_pose_data);
     else
     {
