@@ -45,7 +45,7 @@ include_directories(${catkin_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
 add_library(amcl_pf
                     src/amcl/pf/pf.c
                     src/amcl/pf/pf_kdtree.c
-                    src/amcl/pf/pf_pdf.c
+                    src/amcl/pf/pf_pdf.cpp
                     src/amcl/pf/pf_vector.c
                     src/amcl/pf/eig3.c
                     src/amcl/pf/pf_draw.c)

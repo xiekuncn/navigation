@@ -1533,7 +1533,7 @@ AmclNode::initialPosesReceived(const amcl::PoseWithCovarianceArrayStamped& msg)
 void 
 AmclNode::initialPolygonReceived(const geometry_msgs::PolygonStamped& msg)
 {
-  boost::recursive_mutex::scoped_lock prl(configuration_mutex_);
+  // boost::recursive_mutex::scoped_lock prl(configuration_mutex_);
   if(msg.header.frame_id == "")
   {
     // This should be removed at some point
@@ -1568,7 +1568,7 @@ AmclNode::initialPolygonReceived(const geometry_msgs::PolygonStamped& msg)
     // global_frame_id_ frame doesn't exist.  We only care about in-time
     // transformation for on-the-move pose-setting, so ignoring this
     // startup condition doesn't really cost us anything.
-    if(sent_first_transform_)
+    // if(sent_first_transform_)
       ROS_WARN("Failed to transform initial pose in time (%s)", e.what());
     // tx_odom.setIdentity();
   }

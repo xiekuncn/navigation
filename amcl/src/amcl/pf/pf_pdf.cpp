@@ -33,7 +33,7 @@
 //#include <gsl/gsl_randist.h>
 
 #include "pf_pdf.h"
-
+#include <ros/ros.h>
 // Random number generator seed value
 static unsigned int pf_pdf_seed;
 
@@ -42,21 +42,60 @@ static unsigned int pf_pdf_seed;
 * Uniform Distribution
 * add by Bill.xie xiekun@cvte.com
 **************************************************************************/
+bool onSegment(pf_vector_t p, pf_vector_t q, pf_vector_t r)
+{
+    if(q.v[0] <= std::max(p.v[0], r.v[0]) && 
+        q.v[0] >= std::min(p.v[0], r.v[0]) &&
+        q.v[1] <= std::max(p.v[1], r.v[1]) &&
+        q.v[1] <= std::min(p.v[1], r.v[1]))
+        return true;
+    return false;
+}
 
+int orientation(pf_vector_t p, pf_vector_t q, pf_vector_t r)
+{
+    int val = (q.v[1] - p.v[1]) * (r.v[0] - q.v[0]) -
+              (q.v[0] - p.v[0]) * (r.v[1] - q.v[1]);
+    if (val == 0) return 0;
+    return (val > 0) ? 1 : 2;
+}
+
+
+bool doIntersect(pf_vector_t p1, pf_vector_t p2, pf_vector_t tp1, pf_vector_t tp2)
+{
+    int o1 = orientation(p1, p2, tp1);
+    int o2 = orientation(p1, p2, tp2);
+    int o3 = orientation(tp1, tp2, p1);
+    int o4 = orientation(tp1, tp2, p2);
+    if (o1 != o2 && o3 != o4)
+        return true;
+    if (o1 == 0 && onSegment(p1, tp1, p2)) return true;
+    if (o2 == 0 && onSegment(p1, tp2, p2)) return true;
+    if (o3 == 0 && onSegment(tp1, p1, tp2)) return true;
+    if (o4 == 0 && onSegment(tp1, p2, tp2)) return true;
+    return false;
+}
+// http://www.geeksforgeeks.org/how-to-check-if-a-given-point-lies-inside-a-polygon
 int contains(pf_pdf_uniform_t* pdf, pf_vector_t test_point)
 {
   int crossings = 0;
   int i;
+  pf_vector_t extreme_point;
+  extreme_point.v[0] = 60000;
+  extreme_point.v[1] = test_point.v[1];
+  extreme_point.v[2] = 0;
   for (i = 0; i < pdf->polygon.size; ++i)
   {
     pf_vector_t point = pdf->polygon.points[i];
     pf_vector_t next_point = pdf->polygon.points[(i + 1) % pdf->polygon.size];
-    double slope = (next_point.v[1] - point.v[1]) / (next_point.v[0] - point.v[0]);
-    int cond1 = (point.v[0] <= test_point.v[0]) && (test_point.v[0] < next_point.v[0]);
-    int cond2 = (next_point.v[0] <= test_point.v[0]) && (test_point.v[0] < point.v[0]);
-    int above = (point.v[1] < slope * (test_point.v[0] - point.v[0]) + point.v[1]);
-    if ( (cond1 || cond2) && above)
-      crossings++;
+    if (doIntersect(point, next_point, test_point, extreme_point))
+    {
+       if(orientation(point, test_point, next_point) == 0)
+        {
+            return onSegment(point, test_point, next_point);
+        }
+        crossings++;
+    }
   }
   return crossings % 2 != 0;
 }
@@ -67,11 +106,11 @@ pf_pdf_uniform_t *pf_pdf_uniform_alloc(pf_polygon_t polygon)
 {
   if (polygon.size < 3)
     return NULL;
-  pf_pdf_uniform_t* pdf = calloc(1, sizeof(pf_pdf_uniform_t));
+  pf_pdf_uniform_t* pdf = (pf_pdf_uniform_t*)malloc(sizeof(pf_pdf_uniform_t));
   pdf->polygon.size = polygon.size;
   pdf->polygon.points = (pf_vector_t*)malloc(sizeof(pf_vector_t) * polygon.size);
-  // point (0, 0) is always insides the polygon.
-  pdf->min_x = pdf->max_x = pdf->min_y = pdf->max_y = 0;
+  pdf->min_x = pdf->min_y = 65500;
+  pdf->max_x = pdf->max_y = -65500;
   int i;
   for (i = 0; i < polygon.size; ++i)
   {
@@ -93,6 +132,7 @@ pf_pdf_uniform_t *pf_pdf_uniform_alloc(pf_polygon_t polygon)
       pdf->min_y = polygon.points[i].v[1];
     }
   }
+  srand48(++pf_pdf_seed);
 
   return pdf;
 }
@@ -114,9 +154,10 @@ pf_vector_t pf_pdf_uniform_sample(pf_pdf_uniform_t* pdf)
     r = drand48();
     pose.v[1] = (pdf->max_y - pdf->min_y) * r + pdf->min_y;
     r = drand48();
-    pose.v[3] = 2 * M_PI * ( r - 0.5);
-  } while(contains(pdf, pose) == 0);
-
+    pose.v[2] = 2 * M_PI * ( r - 0.5);
+  } 
+  // while(contains(pdf, pose) == 0);
+  while(0);
   return pose;
 }
 
@@ -130,7 +171,7 @@ pf_pdf_gaussian_t *pf_pdf_gaussian_alloc(pf_vector_t x, pf_matrix_t cx)
   pf_matrix_t cd;
   pf_pdf_gaussian_t *pdf;
 
-  pdf = calloc(1, sizeof(pf_pdf_gaussian_t));
+  pdf = (pf_pdf_gaussian_t*)malloc(sizeof(pf_pdf_gaussian_t));
 
   pdf->x = x;
   pdf->cx = cx;
