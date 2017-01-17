@@ -33,6 +33,7 @@
 
 #include "map/map.h"
 #include "pf/pf.h"
+#include "pf/pf_pdf.h"
 #include "sensors/amcl_odom.h"
 #include "sensors/amcl_laser.h"
 
@@ -140,6 +141,12 @@ class AmclNode
 
     tf::Transform latest_tf_;
     bool latest_tf_valid_;
+    std::vector<amcl_hyp_t> latest_hyps_;
+
+
+    // Pose-generating function used to gaussian distribute particles over
+    // the last latest_hyps_
+    static pf_vector_t gaussianPoseGenerator(void* arg);
 
     // Pose-generating function used to uniformly distribute particles over
     // the map
@@ -550,8 +557,12 @@ void AmclNode::reconfigureCB(AMCLConfig &config, uint32_t level)
 
   pf_ = pf_alloc(min_particles_, max_particles_,
                  alpha_slow_, alpha_fast_,
-                 (pf_init_model_fn_t)AmclNode::uniformPoseGenerator,
-                 (void *)map_);
+                 (pf_init_model_fn_t)AmclNode::gaussianPoseGenerator,
+                 (void *)this);
+  // pf_ = pf_alloc(min_particles_, max_particles_,
+  //                alpha_slow_, alpha_fast_,
+  //                (pf_init_model_fn_t)AmclNode::uniformPoseGenerator,
+  //                (void *)map_);
   pf_err_ = config.kld_err; 
   pf_z_ = config.kld_z; 
   pf_->pop_err = pf_err_;
@@ -839,8 +850,12 @@ AmclNode::handleMapMessage(const nav_msgs::OccupancyGrid& msg)
   // Create the particle filter
   pf_ = pf_alloc(min_particles_, max_particles_,
                  alpha_slow_, alpha_fast_,
-                 (pf_init_model_fn_t)AmclNode::uniformPoseGenerator,
-                 (void *)map_);
+                 (pf_init_model_fn_t)AmclNode::gaussianPoseGenerator,
+                 (void *)this);
+  // pf_ = pf_alloc(min_particles_, max_particles_,
+  //                alpha_slow_, alpha_fast_,
+  //                (pf_init_model_fn_t)AmclNode::uniformPoseGenerator,
+  //                (void *)map_);
   pf_->pop_err = pf_err_;
   pf_->pop_z = pf_z_;
 
@@ -976,6 +991,34 @@ AmclNode::getOdomPose(tf::Stamped<tf::Pose>& odom_pose,
   return true;
 }
 
+pf_vector_t
+AmclNode::gaussianPoseGenerator(void* arg)
+{
+  pf_pdf_gaussian_t *pdf;
+  AmclNode* _self = (AmclNode*)arg;
+
+  // get a random hyp using mcl base on weight.
+  std::vector<double> weights;
+  weights.resize(_self->latest_hyps_.size() + 1);
+  weights[0] = 0;
+  double total; // total is same as weights[latest_hypes_.size() + 1]
+  for (int i = 0; i < _self->latest_hyps_.size(); ++i)
+  {
+    total += _self->latest_hyps_[i].weight;
+    weights[i + 1] = weights[i] + _self->latest_hyps_[i].weight;
+  }
+  double r = drand48() * total;
+  int index;
+  for(index = 0; index < _self->latest_hyps_.size(); index++)
+  {
+    if((weights[index] <= r) && (r < weights[index + 1]))
+      break;
+  }
+  pdf = pf_pdf_gaussian_alloc(_self->latest_hyps_[index].pf_pose_mean, _self->latest_hyps_[index].pf_pose_cov);
+  pf_vector_t sample = pf_pdf_gaussian_sample(pdf);
+  pf_pdf_gaussian_free(pdf);
+  return sample;
+}
 
 pf_vector_t
 AmclNode::uniformPoseGenerator(void* arg)
@@ -1288,8 +1331,9 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
     // Read out the current hypotheses
     double max_weight = 0.0;
     int max_weight_hyp = -1;
-    std::vector<amcl_hyp_t> hyps;
-    hyps.resize(pf_->sets[pf_->current_set].cluster_count);
+    // std::vector<amcl_hyp_t> hyps;
+    latest_hyps_.clear();
+    latest_hyps_.resize(pf_->sets[pf_->current_set].cluster_count);
     for(int hyp_count = 0;
         hyp_count < pf_->sets[pf_->current_set].cluster_count; hyp_count++)
     {
@@ -1302,13 +1346,13 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
         break;
       }
 
-      hyps[hyp_count].weight = weight;
-      hyps[hyp_count].pf_pose_mean = pose_mean;
-      hyps[hyp_count].pf_pose_cov = pose_cov;
+      latest_hyps_[hyp_count].weight = weight;
+      latest_hyps_[hyp_count].pf_pose_mean = pose_mean;
+      latest_hyps_[hyp_count].pf_pose_cov = pose_cov;
 
-      if(hyps[hyp_count].weight > max_weight)
+      if(latest_hyps_[hyp_count].weight > max_weight)
       {
-        max_weight = hyps[hyp_count].weight;
+        max_weight = latest_hyps_[hyp_count].weight;
         max_weight_hyp = hyp_count;
       }
     }
@@ -1316,12 +1360,12 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
     if(max_weight > 0.0)
     {
       ROS_DEBUG("Max weight pose: %.3f %.3f %.3f",
-                hyps[max_weight_hyp].pf_pose_mean.v[0],
-                hyps[max_weight_hyp].pf_pose_mean.v[1],
-                hyps[max_weight_hyp].pf_pose_mean.v[2]);
+                latest_hyps_[max_weight_hyp].pf_pose_mean.v[0],
+                latest_hyps_[max_weight_hyp].pf_pose_mean.v[1],
+                latest_hyps_[max_weight_hyp].pf_pose_mean.v[2]);
       /*
          puts("");
-         pf_matrix_fprintf(hyps[max_weight_hyp].pf_pose_cov, stdout, "%6.3f");
+         pf_matrix_fprintf(latest_hyps_[max_weight_hyp].pf_pose_cov, stdout, "%6.3f");
          puts("");
        */
       geometry_msgs::PoseWithCovarianceStamped p;
@@ -1329,9 +1373,9 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
       p.header.frame_id = global_frame_id_;
       p.header.stamp = laser_scan->header.stamp;
       // Copy in the pose
-      p.pose.pose.position.x = hyps[max_weight_hyp].pf_pose_mean.v[0];
-      p.pose.pose.position.y = hyps[max_weight_hyp].pf_pose_mean.v[1];
-      tf::quaternionTFToMsg(tf::createQuaternionFromYaw(hyps[max_weight_hyp].pf_pose_mean.v[2]),
+      p.pose.pose.position.x = latest_hyps_[max_weight_hyp].pf_pose_mean.v[0];
+      p.pose.pose.position.y = latest_hyps_[max_weight_hyp].pf_pose_mean.v[1];
+      tf::quaternionTFToMsg(tf::createQuaternionFromYaw(latest_hyps_[max_weight_hyp].pf_pose_mean.v[2]),
                             p.pose.pose.orientation);
       // Copy in the covariance, converting from 3-D to 6-D
       pf_sample_set_t* set = pf_->sets + pf_->current_set;
@@ -1341,13 +1385,13 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
         {
           // Report the overall filter covariance, rather than the
           // covariance for the highest-weight cluster
-          //p.covariance[6*i+j] = hyps[max_weight_hyp].pf_pose_cov.m[i][j];
+          //p.covariance[6*i+j] = latest_hyps_[max_weight_hyp].pf_pose_cov.m[i][j];
           p.pose.covariance[6*i+j] = set->cov.m[i][j];
         }
       }
       // Report the overall filter covariance, rather than the
       // covariance for the highest-weight cluster
-      //p.covariance[6*5+5] = hyps[max_weight_hyp].pf_pose_cov.m[2][2];
+      //p.covariance[6*5+5] = latest_hyps_[max_weight_hyp].pf_pose_cov.m[2][2];
       p.pose.covariance[6*5+5] = set->cov.m[2][2];
 
       /*
@@ -1364,17 +1408,17 @@ AmclNode::laserReceived(const sensor_msgs::LaserScanConstPtr& laser_scan)
       last_published_pose = p;
 
       ROS_DEBUG("New pose: %6.3f %6.3f %6.3f",
-               hyps[max_weight_hyp].pf_pose_mean.v[0],
-               hyps[max_weight_hyp].pf_pose_mean.v[1],
-               hyps[max_weight_hyp].pf_pose_mean.v[2]);
+               latest_hyps_[max_weight_hyp].pf_pose_mean.v[0],
+               latest_hyps_[max_weight_hyp].pf_pose_mean.v[1],
+               latest_hyps_[max_weight_hyp].pf_pose_mean.v[2]);
 
       // subtracting base to odom from map to base and send map to odom instead
       tf::Stamped<tf::Pose> odom_to_map;
       try
       {
-        tf::Transform tmp_tf(tf::createQuaternionFromYaw(hyps[max_weight_hyp].pf_pose_mean.v[2]),
-                             tf::Vector3(hyps[max_weight_hyp].pf_pose_mean.v[0],
-                                         hyps[max_weight_hyp].pf_pose_mean.v[1],
+        tf::Transform tmp_tf(tf::createQuaternionFromYaw(latest_hyps_[max_weight_hyp].pf_pose_mean.v[2]),
+                             tf::Vector3(latest_hyps_[max_weight_hyp].pf_pose_mean.v[0],
+                                         latest_hyps_[max_weight_hyp].pf_pose_mean.v[1],
                                          0.0));
         tf::Stamped<tf::Pose> tmp_tf_stamped (tmp_tf.inverse(),
                                               laser_scan->header.stamp,
